@@ -941,11 +941,8 @@ const LeadDetail = () => {
                     onChange={(e) => setNewStatus(e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   >
-                    <option value="new">New</option>
-                    <option value="contacted">Contacted</option>
-                    <option value="qualified">Qualified</option>
                     <option value="negotiation">Negotiation</option>
-                    <option value="approved">Approved</option>
+                    <option value="cancelled">Cancel</option>
                   </select>
                 </div>
                 <div>

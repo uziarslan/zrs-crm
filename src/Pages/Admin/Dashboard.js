@@ -1,18 +1,77 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
 
 const AdminDashboard = () => {
+    const navigate = useNavigate();
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
     const [admins, setAdmins] = useState([]);
     const [groups, setGroups] = useState([]);
     const [savingGroups, setSavingGroups] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
+    const [showSearchResults, setShowSearchResults] = useState(false);
+    const [searchLoading, setSearchLoading] = useState(false);
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
+    const searchRef = useRef(null);
 
     useEffect(() => {
         fetchDashboardStats();
         fetchAdmins();
         fetchGroups();
+    }, []);
+
+    // Search functionality
+    useEffect(() => {
+        const searchLeads = async () => {
+            if (!searchQuery || searchQuery.trim().length < 2) {
+                setSearchResults([]);
+                setShowSearchResults(false);
+                return;
+            }
+
+            setSearchLoading(true);
+            try {
+                const response = await axiosInstance.get(`/admin/search/leads?q=${encodeURIComponent(searchQuery.trim())}`);
+                const results = response.data.data || [];
+                setSearchResults(results);
+                // Always show dropdown if we have results
+                if (results.length > 0) {
+                    setShowSearchResults(true);
+                } else {
+                    setShowSearchResults(false);
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                setSearchResults([]);
+                setShowSearchResults(false);
+            } finally {
+                setSearchLoading(false);
+            }
+        };
+
+        const debounceTimer = setTimeout(() => {
+            searchLeads();
+        }, 300);
+
+        return () => clearTimeout(debounceTimer);
+    }, [searchQuery]);
+
+    // Close search dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (searchRef.current && !searchRef.current.contains(event.target)) {
+                setShowSearchResults(false);
+                setIsSearchFocused(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
     }, []);
 
     const fetchDashboardStats = async () => {
@@ -98,6 +157,12 @@ const AdminDashboard = () => {
         });
     };
 
+    const handleSearchResultClick = (lead) => {
+        setSearchQuery('');
+        setShowSearchResults(false);
+        navigate(`/admin/leads/${lead._id}`);
+    };
+
     const autoSaveGroups = async (updatedGroups) => {
         setSavingGroups(true);
         try {
@@ -127,6 +192,126 @@ const AdminDashboard = () => {
 
     return (
         <DashboardLayout title="Admin Dashboard">
+            {/* Search Bar */}
+            <div className="mb-8 relative" ref={searchRef}>
+                <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Search leads by ID, name, phone, email, vehicle make, model, VIN, etc..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                            setSearchQuery(e.target.value);
+                        }}
+                        onFocus={() => {
+                            setIsSearchFocused(true);
+                            // Show dropdown if we have a valid query and results
+                            if (searchQuery.trim().length >= 2 && searchResults.length > 0) {
+                                setShowSearchResults(true);
+                            }
+                        }}
+                        onBlur={() => {
+                            // Don't set focus to false immediately, let click-outside handle it
+                            // This prevents dropdown from closing when clicking inside it
+                            setTimeout(() => setIsSearchFocused(false), 200);
+                        }}
+                        className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-base"
+                    />
+                    {searchLoading && (
+                        <div className="absolute inset-y-0 right-0 pr-4 flex items-center">
+                            <svg className="animate-spin h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                    )}
+                </div>
+
+                {/* Search Results Dropdown */}
+                {searchQuery.trim().length >= 2 && searchResults.length > 0 && (showSearchResults || isSearchFocused) && (
+                    <div className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-96 overflow-y-auto">
+                        {searchResults.map((lead) => (
+                            <div
+                                key={lead._id}
+                                onClick={() => handleSearchResultClick(lead)}
+                                className="flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition-colors"
+                            >
+                                {/* Image or Placeholder */}
+                                <div className="flex-shrink-0 w-16 h-16 bg-gray-100 rounded-lg overflow-hidden relative">
+                                    {lead.imageUrl ? (
+                                        <>
+                                            <img
+                                                src={lead.imageUrl}
+                                                alt={`${lead.vehicleInfo?.make || ''} ${lead.vehicleInfo?.model || ''}`}
+                                                className="w-full h-full object-cover"
+                                                onError={(e) => {
+                                                    e.target.style.display = 'none';
+                                                    const placeholder = e.target.parentElement.querySelector('.image-placeholder');
+                                                    if (placeholder) placeholder.style.display = 'flex';
+                                                }}
+                                            />
+                                            <div className="image-placeholder w-full h-full absolute inset-0 hidden items-center justify-center">
+                                                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                                                </svg>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                                            </svg>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Vehicle Info */}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-sm font-semibold text-primary-600">{lead.leadId}</span>
+                                        <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${lead.status === 'new' ? 'bg-blue-100 text-blue-800' :
+                                            lead.status === 'negotiation' ? 'bg-yellow-100 text-yellow-800' :
+                                                lead.status === 'inspection' ? 'bg-purple-100 text-purple-800' :
+                                                    lead.status === 'approved' ? 'bg-green-100 text-green-800' :
+                                                        lead.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
+                                                            'bg-gray-100 text-gray-800'
+                                            }`}>
+                                            {lead.status}
+                                        </span>
+                                    </div>
+                                    <div className="text-sm font-medium text-gray-900">
+                                        {lead.vehicleInfo?.make && lead.vehicleInfo?.model ? (
+                                            <>
+                                                {lead.vehicleInfo.make} {lead.vehicleInfo.model}
+                                                {lead.vehicleInfo.year && ` ${lead.vehicleInfo.year}`}
+                                            </>
+                                        ) : (
+                                            <span className="text-gray-500">No vehicle info</span>
+                                        )}
+                                    </div>
+                                    {lead.contactInfo?.name && (
+                                        <div className="text-xs text-gray-500 mt-0.5">
+                                            {lead.contactInfo.name}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* No Results Message */}
+                {showSearchResults && searchQuery.trim().length >= 2 && !searchLoading && searchResults.length === 0 && (
+                    <div className="absolute z-50 w-full mt-2 bg-white border border-gray-200 rounded-lg shadow-lg p-4 text-center text-gray-500">
+                        No leads found
+                    </div>
+                )}
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <StatCard title="Total Managers" value={stats?.users?.totalManagers || 0} color="blue" />
                 <StatCard title="Total Investors" value={stats?.users?.totalInvestors || 0} color="green" />
@@ -166,6 +351,12 @@ const AdminDashboard = () => {
                             <span className="text-gray-600">Sales Invoices:</span>
                             <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
                                 {stats?.approvals?.pendingSalesApprovals || 0}
+                            </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-gray-600">Pending Dual Approval:</span>
+                            <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
+                                {stats?.approvals?.pendingDualApprovals || 0}
                             </span>
                         </div>
                     </div>

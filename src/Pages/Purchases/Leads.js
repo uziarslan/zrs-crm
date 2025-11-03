@@ -30,9 +30,9 @@ const PurchaseLeads = () => {
 
       const response = await axiosInstance.get(`/purchases/leads?${params}`);
 
-      // Only show leads with status: new, approved, or cancelled
+      // Only show leads with status: new or cancelled
       const filteredLeads = response.data.data.filter(lead =>
-        ['new', 'approved', 'cancelled'].includes(lead.status)
+        ['new', 'cancelled'].includes(lead.status)
       );
 
       // Apply status filter if selected
@@ -53,7 +53,14 @@ const PurchaseLeads = () => {
     try {
       const params = new URLSearchParams();
       params.append('type', 'purchase');
-      if (filters.status) params.append('status', filters.status);
+      // Export both 'new' and 'cancelled' leads (matching what's displayed on the page)
+      // If a specific status filter is selected, export only that status
+      if (filters.status) {
+        params.append('status', filters.status);
+      } else {
+        // Export both statuses that are shown on this page
+        params.append('status', 'new,cancelled');
+      }
 
       const response = await axiosInstance.get(`/export/leads?${params}`, {
         responseType: 'blob'
@@ -149,7 +156,7 @@ const PurchaseLeads = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Purchase Leads</h1>
             <p className="text-sm text-gray-600 mt-1">
-              Manage new leads, approved deals, and cancelled opportunities
+              Manage new leads and cancelled opportunities
             </p>
           </div>
           <Link
@@ -164,7 +171,7 @@ const PurchaseLeads = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div className="bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
               <div>
@@ -181,26 +188,10 @@ const PurchaseLeads = () => {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-green-50 to-green-100 border-2 border-green-200 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-green-600">Approved</p>
-                <p className="text-2xl font-bold text-green-900">
-                  {leads.filter(l => l.status === 'approved').length}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-green-200 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
           <div className="bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-red-600">Cancelled</p>
+                <p className="text-sm font-medium text-red-600">Cancel</p>
                 <p className="text-2xl font-bold text-red-900">
                   {leads.filter(l => l.status === 'cancelled').length}
                 </p>
@@ -257,8 +248,7 @@ const PurchaseLeads = () => {
                   >
                     <option value="">Choose...</option>
                     <option value="negotiation">Negotiation</option>
-                    <option value="approved">Approved</option>
-                    <option value="cancelled">Cancelled</option>
+                    <option value="cancelled">Cancel</option>
                   </select>
                 </div>
               </div>
@@ -268,8 +258,8 @@ const PurchaseLeads = () => {
                   onClick={handleBulkStatusUpdate}
                   disabled={!bulkStatus}
                   className={`inline-flex items-center px-5 py-2.5 text-sm font-semibold rounded-lg shadow-md transition-all ${bulkStatus
-                      ? 'text-white bg-primary-600 hover:bg-primary-700 hover:shadow-lg'
-                      : 'text-gray-400 bg-gray-200 cursor-not-allowed'
+                    ? 'text-white bg-primary-600 hover:bg-primary-700 hover:shadow-lg'
+                    : 'text-gray-400 bg-gray-200 cursor-not-allowed'
                     }`}
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -315,8 +305,7 @@ const PurchaseLeads = () => {
         >
           <option value="">All Status</option>
           <option value="new">New</option>
-          <option value="approved">Approved</option>
-          <option value="cancelled">Cancelled</option>
+          <option value="cancelled">Cancel</option>
         </select>
         <button
           onClick={exportLeads}
