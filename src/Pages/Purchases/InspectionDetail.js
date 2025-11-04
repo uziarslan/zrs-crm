@@ -806,6 +806,17 @@ const InspectionDetail = () => {
                         </svg>
                         Back to Inspection
                     </button>
+                    <a
+                        href={`/purchases/inspection/${id}/print`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 rounded-lg transition-colors shadow-md"
+                    >
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        View & Print Car Details
+                    </a>
                 </div>
 
                 {/* Status Header */}
@@ -942,8 +953,9 @@ const InspectionDetail = () => {
                                                         type="number"
                                                         value={priceAnalysis.minSellingPrice}
                                                         onChange={(e) => handlePriceAnalysisChange('minSellingPrice', e.target.value)}
+                                                        onWheel={(e) => e.target.blur()}
                                                         disabled={isSubmittedForApproval()}
-                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-lg font-semibold ${isSubmittedForApproval()
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-lg font-semibold [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
                                                             ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
                                                             : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
                                                             }`}
@@ -966,8 +978,9 @@ const InspectionDetail = () => {
                                                         type="number"
                                                         value={priceAnalysis.maxSellingPrice}
                                                         onChange={(e) => handlePriceAnalysisChange('maxSellingPrice', e.target.value)}
+                                                        onWheel={(e) => e.target.blur()}
                                                         disabled={isSubmittedForApproval()}
-                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-lg font-semibold ${isSubmittedForApproval()
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-lg font-semibold [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
                                                             ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
                                                             : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
                                                             }`}
@@ -1011,8 +1024,9 @@ const InspectionDetail = () => {
                                                         type="number"
                                                         value={priceAnalysis.purchasedFinalPrice}
                                                         onChange={(e) => handlePriceAnalysisChange('purchasedFinalPrice', e.target.value)}
+                                                        onWheel={(e) => e.target.blur()}
                                                         disabled={isSubmittedForApproval()}
-                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-lg font-semibold ${isSubmittedForApproval()
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-lg font-semibold [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
                                                             ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
                                                             : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
                                                             }`}
@@ -2018,23 +2032,23 @@ const InspectionDetail = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Transfer Cost (RTA) <span className="text-red-500">*</span></label>
-                                    <input type="number" min="0" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500" value={poFields.transferCost} onChange={(e) => setPOFields({ ...poFields, transferCost: e.target.value })} />
+                                    <input type="number" min="0" onWheel={(e) => e.target.blur()} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={poFields.transferCost} onChange={(e) => setPOFields({ ...poFields, transferCost: e.target.value })} />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Detailing / Inspection Cost <span className="text-red-500">*</span></label>
-                                    <input type="number" min="0" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500" value={poFields.detailing_inspection_cost} onChange={(e) => setPOFields({ ...poFields, detailing_inspection_cost: e.target.value })} />
+                                    <input type="number" min="0" onWheel={(e) => e.target.blur()} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={poFields.detailing_inspection_cost} onChange={(e) => setPOFields({ ...poFields, detailing_inspection_cost: e.target.value })} />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Agent Commission (Optional)</label>
-                                    <input type="number" min="0" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500" value={poFields.agent_commision} onChange={(e) => setPOFields({ ...poFields, agent_commision: e.target.value })} />
+                                    <input type="number" min="0" onWheel={(e) => e.target.blur()} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={poFields.agent_commision} onChange={(e) => setPOFields({ ...poFields, agent_commision: e.target.value })} />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Car Recovery Cost (Optional)</label>
-                                    <input type="number" min="0" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500" value={poFields.car_recovery_cost} onChange={(e) => setPOFields({ ...poFields, car_recovery_cost: e.target.value })} />
+                                    <input type="number" min="0" onWheel={(e) => e.target.blur()} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={poFields.car_recovery_cost} onChange={(e) => setPOFields({ ...poFields, car_recovery_cost: e.target.value })} />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Other Charges (Optional)</label>
-                                    <input type="number" min="0" className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500" value={poFields.other_charges} onChange={(e) => setPOFields({ ...poFields, other_charges: e.target.value })} />
+                                    <input type="number" min="0" onWheel={(e) => e.target.blur()} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={poFields.other_charges} onChange={(e) => setPOFields({ ...poFields, other_charges: e.target.value })} />
                                 </div>
                                 {/* Total Investment is auto-calculated on the server */}
                                 {/* Prepared By is auto-detected from the current admin on the server */}

@@ -51,6 +51,7 @@ const Navbar = () => {
                 { name: 'Inspection', path: '/purchases/inspection' },
                 { name: 'Inventory', path: '/purchases/inventory' },
                 { name: 'Sales', path: '/sales/leads' },
+                { name: 'Sold', path: '/sales/sold' },
                 {
                     name: 'System',
                     path: '/system',

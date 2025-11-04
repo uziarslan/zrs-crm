@@ -21,6 +21,30 @@ const Inventory = () => {
     setShowBulkBar(selectedVehicles.length > 0);
   }, [selectedVehicles]);
 
+  // Refresh inventory when page becomes visible again (e.g., after navigating back from detail page)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchInventory();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Also refresh when the window regains focus (in case visibility API doesn't fire)
+    const handleFocus = () => {
+      fetchInventory();
+    };
+
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const fetchInventory = async () => {
     try {
       const params = new URLSearchParams();
@@ -50,7 +74,7 @@ const Inventory = () => {
 
   // Calculate stats
   const totalVehicles = vehicles.length;
-  const vehiclesInInventory = vehicles.filter(v => v.status === 'in_inventory').length;
+  const vehiclesInInventory = vehicles.filter(v => v.status === 'inventory' || v.status === 'in_inventory').length;
   const vehiclesReadyForSale = vehicles.filter(v => v.status === 'ready_for_sale').length;
   const vehiclesInProgress = vehicles.filter(v => {
     const checklist = v.operationalChecklist;
@@ -58,10 +82,13 @@ const Inventory = () => {
   }).length;
 
   const getChecklistProgress = (vehicle) => {
-    if (!vehicle.operationalChecklist) return 0;
+    if (!vehicle || !vehicle.operationalChecklist) return 0;
     const checklist = vehicle.operationalChecklist;
     const items = ['detailing', 'photoshoot', 'photoshootEdited', 'metaAds', 'onlineAds', 'instagram'];
-    const completed = items.filter(item => checklist[item]?.completed).length;
+    const completed = items.filter(item => {
+      const itemData = checklist[item];
+      return itemData && (itemData.completed === true || itemData.completed === 'true');
+    }).length;
     return Math.round((completed / items.length) * 100);
   };
 
@@ -237,7 +264,8 @@ const Inventory = () => {
                 className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 w-full"
               >
                 <option value="">All Statuses</option>
-                <option value="in_inventory">In Inventory</option>
+                <option value="inventory">In Inventory</option>
+                <option value="consignment">Consignment</option>
                 <option value="ready_for_sale">Ready for Sale</option>
                 <option value="purchased">Purchased</option>
               </select>
@@ -314,22 +342,23 @@ const Inventory = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${vehicle.status === 'in_inventory' ? 'bg-blue-100 text-blue-800' :
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${vehicle.status === 'inventory' || vehicle.status === 'in_inventory' ? 'bg-blue-100 text-blue-800' :
                           vehicle.status === 'ready_for_sale' ? 'bg-green-100 text-green-800' :
-                            'bg-gray-100 text-gray-800'
+                            vehicle.status === 'consignment' ? 'bg-purple-100 text-purple-800' :
+                              'bg-gray-100 text-gray-800'
                           }`}>
                           {vehicle.status?.replace('_', ' ').toUpperCase()}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                          <div className="w-16 bg-gray-200 rounded-full h-2 mr-2 overflow-hidden">
                             <div
-                              className="bg-primary-600 h-2 rounded-full"
-                              style={{ width: `${getChecklistProgress(vehicle)}%` }}
+                              className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${Math.max(0, Math.min(100, getChecklistProgress(vehicle)))}%` }}
                             ></div>
                           </div>
-                          <span className="text-sm text-gray-600">{getChecklistProgress(vehicle)}%</span>
+                          <span className="text-sm text-gray-600 font-medium">{getChecklistProgress(vehicle)}%</span>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

@@ -36,19 +36,42 @@ const InventoryDetail = () => {
         fetchVehicle();
     }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const fetchVehicle = async () => {
+    const fetchVehicle = async (showLoading = true) => {
         try {
-            setLoading(true);
+            if (showLoading) {
+                setLoading(true);
+            }
             const response = await axiosInstance.get(`/purchases/inventory/${id}`);
             setVehicle(response.data.data);
+            setError('');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to fetch vehicle details');
         } finally {
-            setLoading(false);
+            if (showLoading) {
+                setLoading(false);
+            }
         }
     };
 
     const handleUpdateChecklist = async (itemKey, completed, notes = '') => {
+        if (!vehicle) return;
+
+        // Optimistically update the UI immediately
+        const updatedChecklist = {
+            ...vehicle.operationalChecklist,
+            [itemKey]: {
+                completed: completed,
+                notes: notes || '',
+                completedBy: user?.id || user?._id,
+                completedAt: completed ? new Date() : null
+            }
+        };
+
+        setVehicle({
+            ...vehicle,
+            operationalChecklist: updatedChecklist
+        });
+
         try {
             setUpdating(true);
             await axiosInstance.put(`/purchases/vehicles/${id}/checklist`, {
@@ -58,8 +81,11 @@ const InventoryDetail = () => {
                 completedBy: user.id,
                 completedAt: completed ? new Date() : null
             });
-            await fetchVehicle(); // Refresh vehicle data
+            // Refresh from server to ensure consistency (without showing loading state)
+            await fetchVehicle(false);
         } catch (err) {
+            // Revert optimistic update on error (without showing loading state)
+            await fetchVehicle(false);
             alert(err.response?.data?.message || 'Failed to update checklist');
         } finally {
             setUpdating(false);
@@ -280,16 +306,28 @@ const InventoryDetail = () => {
                                         <div className="space-y-3">
                                             <div className="flex justify-between">
                                                 <span className="text-gray-600">Name:</span>
-                                                <span className="font-medium">{vehicle.ownerName}</span>
+                                                <span className="font-medium">{vehicle.contactInfo?.name || 'N/A'}</span>
                                             </div>
                                             <div className="flex justify-between">
                                                 <span className="text-gray-600">Phone:</span>
-                                                <span className="font-medium">{vehicle.ownerContact?.phone || 'N/A'}</span>
+                                                <span className="font-medium">{vehicle.contactInfo?.phone || 'N/A'}</span>
                                             </div>
                                             <div className="flex justify-between">
                                                 <span className="text-gray-600">Email:</span>
-                                                <span className="font-medium">{vehicle.ownerContact?.email || 'N/A'}</span>
+                                                <span className="font-medium break-all">{vehicle.contactInfo?.email || 'N/A'}</span>
                                             </div>
+                                            {vehicle.contactInfo?.passportOrEmiratesId && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Passport/Emirates ID:</span>
+                                                    <span className="font-medium">{vehicle.contactInfo.passportOrEmiratesId}</span>
+                                                </div>
+                                            )}
+                                            {vehicle.contactInfo?.preferredContact && (
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-600">Preferred Contact:</span>
+                                                    <span className="font-medium capitalize">{vehicle.contactInfo.preferredContact}</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -321,9 +359,10 @@ const InventoryDetail = () => {
                                 <div className="bg-gray-50 rounded-lg p-4">
                                     <h3 className="font-semibold text-gray-900 mb-4">Status</h3>
                                     <div className="flex items-center space-x-2">
-                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${vehicle.status === 'in_inventory' ? 'bg-blue-100 text-blue-800' :
+                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${vehicle.status === 'inventory' || vehicle.status === 'in_inventory' ? 'bg-blue-100 text-blue-800' :
                                             vehicle.status === 'ready_for_sale' ? 'bg-green-100 text-green-800' :
-                                                'bg-gray-100 text-gray-800'
+                                                vehicle.status === 'consignment' ? 'bg-purple-100 text-purple-800' :
+                                                    'bg-gray-100 text-gray-800'
                                             }`}>
                                             {vehicle.status?.replace('_', ' ').toUpperCase()}
                                         </span>
@@ -382,7 +421,7 @@ const InventoryDetail = () => {
                                     </div>
 
                                     {/* Mark as Ready Button */}
-                                    {isChecklistComplete() && vehicle.status === 'in_inventory' && (
+                                    {isChecklistComplete() && (vehicle.status === 'inventory' || vehicle.status === 'in_inventory') && (
                                         <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
                                             <div className="flex items-center justify-between">
                                                 <div>
@@ -507,18 +546,57 @@ const InventoryDetail = () => {
                                             {vehicle.investorAllocation.map((allocation, index) => (
                                                 <div key={index} className="bg-white border border-gray-200 rounded-lg p-4">
                                                     <div className="flex justify-between items-center mb-2">
-                                                        <span className="font-medium text-gray-900">
-                                                            {allocation.investorId?.name || 'Unknown Investor'}
-                                                        </span>
-                                                        <span className="text-sm text-gray-600">
+                                                        <div>
+                                                            <span className="font-medium text-gray-900">
+                                                                {allocation.investorId?.name || vehicle.investor?.name || 'Unknown Investor'}
+                                                            </span>
+                                                            {allocation.investorId?.email && (
+                                                                <div className="text-xs text-gray-500 mt-1">
+                                                                    {allocation.investorId.email}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-sm text-gray-600 font-medium">
                                                             {allocation.percentage}%
                                                         </span>
                                                     </div>
                                                     <div className="text-lg font-semibold text-green-600">
-                                                        ${allocation.amount?.toLocaleString()}
+                                                        AED {allocation.amount?.toLocaleString() || '0'}
                                                     </div>
                                                 </div>
                                             ))}
+                                            {/* Total Investment */}
+                                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="font-semibold text-gray-900">Total Investment:</span>
+                                                    <span className="text-xl font-bold text-blue-600">
+                                                        AED {vehicle.investorAllocation.reduce((sum, alloc) => sum + (alloc.amount || 0), 0).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : vehicle.investor ? (
+                                        <div className="bg-white border border-gray-200 rounded-lg p-4">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <div>
+                                                    <span className="font-medium text-gray-900">
+                                                        {vehicle.investor?.name || 'Unknown Investor'}
+                                                    </span>
+                                                    {vehicle.investor?.email && (
+                                                        <div className="text-xs text-gray-500 mt-1">
+                                                            {vehicle.investor.email}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {vehicle.purchasePrice && (
+                                                <div className="text-lg font-semibold text-green-600">
+                                                    AED {vehicle.purchasePrice.toLocaleString()}
+                                                </div>
+                                            )}
+                                            <div className="text-xs text-gray-500 mt-2">
+                                                Investment details from Purchase Order pending
+                                            </div>
                                         </div>
                                     ) : (
                                         <p className="text-gray-500 text-sm">No investment information available</p>

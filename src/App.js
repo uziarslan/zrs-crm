@@ -25,6 +25,7 @@ import Negotiation from './Pages/Purchases/Negotiation';
 import NegotiationDetail from './Pages/Purchases/NegotiationDetail';
 import Inspection from './Pages/Purchases/Inspection';
 import InspectionDetail from './Pages/Purchases/InspectionDetail';
+import CarDetailsPrint from './Pages/Purchases/CarDetailsPrint';
 import LeadDetail from './Pages/Purchases/LeadDetail';
 import CreateLead from './Pages/Purchases/CreateLead';
 import Inventory from './Pages/Purchases/Inventory';
@@ -36,6 +37,7 @@ import SalesLeads from './Pages/Sales/Leads';
 import SalesLeadDetail from './Pages/Sales/LeadDetail';
 import CreateSale from './Pages/Sales/CreateSale';
 import SalesReport from './Pages/Sales/Report';
+import Sold from './Pages/Sales/Sold';
 
 // Investor Pages
 import InvestorDashboard from './Pages/Investor/Dashboard';
@@ -153,6 +155,14 @@ function App() {
                         }
                     />
                     <Route
+                        path="/purchases/inspection/:id/print"
+                        element={
+                            <PrivateRoute roles={['admin', 'manager']}>
+                                <CarDetailsPrint />
+                            </PrivateRoute>
+                        }
+                    />
+                    <Route
                         path="/purchases/leads/create"
                         element={
                             <PrivateRoute roles={['admin', 'manager']}>
@@ -199,6 +209,14 @@ function App() {
                         element={
                             <PrivateRoute roles={['admin', 'manager']}>
                                 <SalesLeads />
+                            </PrivateRoute>
+                        }
+                    />
+                    <Route
+                        path="/sales/sold"
+                        element={
+                            <PrivateRoute roles={['admin', 'manager']}>
+                                <Sold />
                             </PrivateRoute>
                         }
                     />

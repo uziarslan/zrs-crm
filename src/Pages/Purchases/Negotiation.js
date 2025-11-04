@@ -19,6 +19,9 @@ const Negotiation = () => {
     const [isMovingToInspection, setIsMovingToInspection] = useState(false);
     const [showDocumentWarningModal, setShowDocumentWarningModal] = useState(false);
     const [leadsWithoutDocs, setLeadsWithoutDocs] = useState([]);
+    const [showConsignmentModal, setShowConsignmentModal] = useState(false);
+    const [isConvertingToConsignment, setIsConvertingToConsignment] = useState(false);
+    const [leadConsignmentData, setLeadConsignmentData] = useState({}); // Per-lead data: { leadId: { priceAnalysis: {...}, chassisNumber: '' } }
 
     useEffect(() => {
         fetchLeads();
@@ -102,6 +105,25 @@ const Negotiation = () => {
             return;
         }
 
+        if (bulkStatus === 'consignment') {
+            // Initialize per-lead data structure
+            const initialLeadData = {};
+            selectedLeads.forEach(leadId => {
+                const lead = leads.find(l => l._id === leadId);
+                initialLeadData[leadId] = {
+                    priceAnalysis: {
+                        minSellingPrice: lead?.priceAnalysis?.minSellingPrice || '',
+                        maxSellingPrice: lead?.priceAnalysis?.maxSellingPrice || '',
+                        purchasedFinalPrice: lead?.priceAnalysis?.purchasedFinalPrice || ''
+                    },
+                    chassisNumber: lead?.vehicleInfo?.vin || ''
+                };
+            });
+            setLeadConsignmentData(initialLeadData);
+            setShowConsignmentModal(true);
+            return;
+        }
+
         if (bulkStatus === 'inspection') {
             const selectedLeadObjects = leads.filter(lead => selectedLeads.includes(lead._id));
             const leadsWithoutDocsFound = selectedLeadObjects.filter(lead => !hasAllRequiredDocuments(lead));
@@ -126,6 +148,125 @@ const Negotiation = () => {
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to bulk update');
         }
+    };
+
+    const handleConvertToConsignment = async () => {
+        // Validate each lead individually
+        const errors = [];
+        const leadIds = Object.keys(leadConsignmentData);
+
+        for (const leadId of leadIds) {
+            const lead = leads.find(l => l._id === leadId);
+            const leadData = leadConsignmentData[leadId];
+            const priceAnalysis = leadData.priceAnalysis;
+
+            // Validate price analysis
+            if (!priceAnalysis.minSellingPrice && !priceAnalysis.maxSellingPrice) {
+                errors.push(`Lead ${lead?.leadId || leadId}: Please enter at least Minimum or Maximum Selling Price`);
+                continue;
+            }
+
+            const minPrice = priceAnalysis.minSellingPrice ? parseFloat(priceAnalysis.minSellingPrice) : null;
+            const maxPrice = priceAnalysis.maxSellingPrice ? parseFloat(priceAnalysis.maxSellingPrice) : null;
+            const finalPrice = priceAnalysis.purchasedFinalPrice ? parseFloat(priceAnalysis.purchasedFinalPrice) : null;
+
+            if (priceAnalysis.minSellingPrice && (isNaN(minPrice) || minPrice <= 0)) {
+                errors.push(`Lead ${lead?.leadId || leadId}: Minimum Selling Price must be a valid positive number`);
+                continue;
+            }
+
+            if (priceAnalysis.maxSellingPrice && (isNaN(maxPrice) || maxPrice <= 0)) {
+                errors.push(`Lead ${lead?.leadId || leadId}: Maximum Selling Price must be a valid positive number`);
+                continue;
+            }
+
+            if (priceAnalysis.purchasedFinalPrice && (isNaN(finalPrice) || finalPrice <= 0)) {
+                errors.push(`Lead ${lead?.leadId || leadId}: Purchased Final Price must be a valid positive number`);
+                continue;
+            }
+
+            if (minPrice && maxPrice && minPrice > maxPrice) {
+                errors.push(`Lead ${lead?.leadId || leadId}: Minimum Selling Price cannot be greater than Maximum Selling Price`);
+                continue;
+            }
+        }
+
+        if (errors.length > 0) {
+            alert(`Validation errors:\n${errors.join('\n')}`);
+            return;
+        }
+
+        setIsConvertingToConsignment(true);
+        try {
+            const leadIdsArray = [];
+
+            // Update price analysis and chassis number for each lead
+            for (const leadId of leadIds) {
+                const leadData = leadConsignmentData[leadId];
+                const priceAnalysis = leadData.priceAnalysis;
+
+                const minPrice = priceAnalysis.minSellingPrice ? parseFloat(priceAnalysis.minSellingPrice) : null;
+                const maxPrice = priceAnalysis.maxSellingPrice ? parseFloat(priceAnalysis.maxSellingPrice) : null;
+                const finalPrice = priceAnalysis.purchasedFinalPrice ? parseFloat(priceAnalysis.purchasedFinalPrice) : null;
+
+                // Update price analysis
+                await axiosInstance.put(`/purchases/leads/${leadId}/price-analysis`, {
+                    minSellingPrice: minPrice,
+                    maxSellingPrice: maxPrice,
+                    purchasedFinalPrice: finalPrice
+                });
+
+                // Update chassis number (VIN) if provided
+                if (leadData.chassisNumber.trim()) {
+                    await axiosInstance.put(`/purchases/leads/${leadId}`, {
+                        vehicleInfo: { vin: leadData.chassisNumber.trim() }
+                    });
+                }
+
+                leadIdsArray.push(leadId);
+            }
+
+            // Then, update status to consignment for all leads
+            await axiosInstance.put('/purchases/leads/bulk-status', {
+                leadIds: leadIdsArray,
+                status: 'consignment'
+            });
+
+            alert(`Successfully converted ${leadIdsArray.length} lead(s) to consignment`);
+            setSelectedLeads([]);
+            setBulkStatus('');
+            setLeadConsignmentData({});
+            setShowConsignmentModal(false);
+            fetchLeads();
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to convert to consignment');
+        } finally {
+            setIsConvertingToConsignment(false);
+        }
+    };
+
+    // Helper functions for bulk consignment
+    const handleLeadPriceAnalysisChange = (leadId, field, value) => {
+        setLeadConsignmentData(prev => ({
+            ...prev,
+            [leadId]: {
+                ...prev[leadId],
+                priceAnalysis: {
+                    ...prev[leadId].priceAnalysis,
+                    [field]: value
+                }
+            }
+        }));
+    };
+
+    const handleLeadChassisNumberChange = (leadId, value) => {
+        setLeadConsignmentData(prev => ({
+            ...prev,
+            [leadId]: {
+                ...prev[leadId],
+                chassisNumber: value
+            }
+        }));
     };
 
     const handleMoveToInspection = (lead) => {
@@ -261,6 +402,7 @@ const Negotiation = () => {
                                     >
                                         <option value="">Choose...</option>
                                         <option value="inspection">Move to Inspection</option>
+                                        <option value="consignment">Convert to Consignment</option>
                                     </select>
                                 </div>
                             </div>
@@ -604,6 +746,203 @@ const Negotiation = () => {
                                 className="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
                             >
                                 Got it
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Consignment Price Analysis Modal */}
+            {showConsignmentModal && (
+                <div
+                    className="fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+                    onClick={() => !isConvertingToConsignment && setShowConsignmentModal(false)}
+                >
+                    <div
+                        className="relative bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-6 py-5 border-b border-gray-200 flex-shrink-0">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-gray-900">Convert to Consignment</h3>
+                                    <p className="mt-1 text-sm text-gray-500">
+                                        Configure price analysis for {selectedLeads.length} selected lead(s)
+                                    </p>
+                                </div>
+                                {!isConvertingToConsignment && (
+                                    <button
+                                        onClick={() => setShowConsignmentModal(false)}
+                                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-5 space-y-6 overflow-y-auto flex-1">
+                            {/* Selected Leads Table */}
+                            <div>
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="text-base font-semibold text-gray-900">Enter Price Analysis for Each Lead</h4>
+                                    <span className="text-sm text-gray-500">{selectedLeads.length} lead(s)</span>
+                                </div>
+
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                                    <div className="flex items-start gap-2">
+                                        <svg className="w-4 h-4 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                        </svg>
+                                        <div className="text-xs text-blue-700">
+                                            <strong>Note:</strong> Please fill in the price analysis for each lead. At least Minimum or Maximum Selling Price is required. Once all required fields are filled, click "Convert to Consignment" to update all leads.
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-gray-200">
+                                            <thead className="bg-gray-50">
+                                                <tr>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Lead & Vehicle</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Min Price <span className="text-red-500">*</span></th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Max Price <span className="text-red-500">*</span></th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Final Price</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Chassis/VIN</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-gray-200">
+                                                {selectedLeads.map((leadId) => {
+                                                    const lead = leads.find(l => l._id === leadId);
+                                                    const leadData = leadConsignmentData[leadId] || { priceAnalysis: { minSellingPrice: '', maxSellingPrice: '', purchasedFinalPrice: '' }, chassisNumber: '' };
+                                                    const priceAnalysis = leadData.priceAnalysis || { minSellingPrice: '', maxSellingPrice: '', purchasedFinalPrice: '' };
+
+                                                    return (
+                                                        <tr key={leadId} className="hover:bg-gray-50">
+                                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                                <div>
+                                                                    <div className="text-sm font-semibold text-primary-600">{lead?.leadId || 'N/A'}</div>
+                                                                    <div className="text-xs text-gray-500">
+                                                                        {lead?.vehicleInfo?.make} {lead?.vehicleInfo?.model} {lead?.vehicleInfo?.year}
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="relative">
+                                                                    <div className="absolute inset-y-0 left-0 pl-1.5 flex items-center pointer-events-none">
+                                                                        <span className="text-gray-400 text-xs">AED</span>
+                                                                    </div>
+                                                                    <input
+                                                                        type="number"
+                                                                        value={priceAnalysis.minSellingPrice || ''}
+                                                                        onChange={(e) => handleLeadPriceAnalysisChange(leadId, 'minSellingPrice', e.target.value)}
+                                                                        onWheel={(e) => e.target.blur()}
+                                                                        disabled={isConvertingToConsignment}
+                                                                        className={`w-full pl-8 pr-2 py-1.5 text-xs border rounded [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isConvertingToConsignment ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200' : 'border-gray-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500'}`}
+                                                                        placeholder="0.00"
+                                                                        min="0"
+                                                                        step="0.01"
+                                                                    />
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="relative">
+                                                                    <div className="absolute inset-y-0 left-0 pl-1.5 flex items-center pointer-events-none">
+                                                                        <span className="text-gray-400 text-xs">AED</span>
+                                                                    </div>
+                                                                    <input
+                                                                        type="number"
+                                                                        value={priceAnalysis.maxSellingPrice || ''}
+                                                                        onChange={(e) => handleLeadPriceAnalysisChange(leadId, 'maxSellingPrice', e.target.value)}
+                                                                        onWheel={(e) => e.target.blur()}
+                                                                        disabled={isConvertingToConsignment}
+                                                                        className={`w-full pl-8 pr-2 py-1.5 text-xs border rounded [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isConvertingToConsignment ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200' : 'border-gray-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500'}`}
+                                                                        placeholder="0.00"
+                                                                        min="0"
+                                                                        step="0.01"
+                                                                    />
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="relative">
+                                                                    <div className="absolute inset-y-0 left-0 pl-1.5 flex items-center pointer-events-none">
+                                                                        <span className="text-gray-400 text-xs">AED</span>
+                                                                    </div>
+                                                                    <input
+                                                                        type="number"
+                                                                        value={priceAnalysis.purchasedFinalPrice || ''}
+                                                                        onChange={(e) => handleLeadPriceAnalysisChange(leadId, 'purchasedFinalPrice', e.target.value)}
+                                                                        onWheel={(e) => e.target.blur()}
+                                                                        disabled={isConvertingToConsignment}
+                                                                        className={`w-full pl-8 pr-2 py-1.5 text-xs border rounded [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isConvertingToConsignment ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200' : 'border-gray-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500'}`}
+                                                                        placeholder="0.00"
+                                                                        min="0"
+                                                                        step="0.01"
+                                                                    />
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <input
+                                                                    type="text"
+                                                                    value={leadData.chassisNumber || ''}
+                                                                    onChange={(e) => handleLeadChassisNumberChange(leadId, e.target.value)}
+                                                                    disabled={isConvertingToConsignment}
+                                                                    className={`w-full px-2 py-1.5 text-xs border rounded ${isConvertingToConsignment ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200' : 'border-gray-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500'}`}
+                                                                    placeholder="VIN"
+                                                                    maxLength={17}
+                                                                />
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end rounded-b-xl flex-shrink-0">
+                            <button
+                                onClick={() => {
+                                    if (!isConvertingToConsignment) {
+                                        setShowConsignmentModal(false);
+                                        setLeadConsignmentData({});
+                                        setBulkStatus('');
+                                    }
+                                }}
+                                disabled={isConvertingToConsignment}
+                                className={`px-4 py-2 text-sm font-medium rounded-lg ${isConvertingToConsignment
+                                    ? 'bg-white text-gray-400 cursor-not-allowed'
+                                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                                    }`}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConvertToConsignment}
+                                disabled={isConvertingToConsignment}
+                                className={`px-4 py-2 text-sm font-medium rounded-lg ${isConvertingToConsignment
+                                    ? 'bg-primary-400 text-white cursor-not-allowed'
+                                    : 'bg-primary-600 text-white hover:bg-primary-700'
+                                    }`}
+                            >
+                                {isConvertingToConsignment ? (
+                                    <span className="flex items-center gap-2">
+                                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Converting...
+                                    </span>
+                                ) : (
+                                    `Convert ${selectedLeads.length} Lead(s) to Consignment`
+                                )}
                             </button>
                         </div>
                     </div>

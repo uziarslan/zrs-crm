@@ -556,7 +556,8 @@ const LeadDetail = () => {
                               ...editData,
                               vehicleInfo: { ...editData.vehicleInfo, year: e.target.value }
                             })}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            onWheel={(e) => e.target.blur()}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                             min="1900"
                             max={new Date().getFullYear() + 1}
                             placeholder={new Date().getFullYear().toString()}
@@ -574,7 +575,8 @@ const LeadDetail = () => {
                               ...editData,
                               vehicleInfo: { ...editData.vehicleInfo, mileage: e.target.value }
                             })}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            onWheel={(e) => e.target.blur()}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                             placeholder="50,000"
                           />
                         </div>
@@ -629,7 +631,8 @@ const LeadDetail = () => {
                               ...editData,
                               vehicleInfo: { ...editData.vehicleInfo, askingPrice: e.target.value }
                             })}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            onWheel={(e) => e.target.blur()}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
                             placeholder="75,000"
                           />
                         </div>
