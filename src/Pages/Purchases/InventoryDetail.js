@@ -22,6 +22,12 @@ const InventoryDetail = () => {
     const [activeTab, setActiveTab] = useState('overview');
     const [updating, setUpdating] = useState(false);
     const [markingReady, setMarkingReady] = useState(false);
+    const [viewingPODocumentId, setViewingPODocumentId] = useState(null);
+    const [downloadingPODocumentId, setDownloadingPODocumentId] = useState(null);
+    const [viewingInvoice, setViewingInvoice] = useState(false);
+    const [downloadingInvoice, setDownloadingInvoice] = useState(false);
+    const [viewingDocumentId, setViewingDocumentId] = useState(null);
+    const [downloadingDocumentId, setDownloadingDocumentId] = useState(null);
 
     const checklistItems = [
         { key: 'detailing', label: 'Detailing', iconSrc: detailingIcon },
@@ -93,9 +99,12 @@ const InventoryDetail = () => {
     };
 
     const handleViewDocument = async (doc) => {
+        const docId = doc._id || doc.url || `${doc.fileName}_${doc.category}`;
+        setViewingDocumentId(docId);
         try {
             if (doc.fileType !== 'application/pdf') {
                 window.open(doc.url, '_blank');
+                setViewingDocumentId(null);
                 return;
             }
 
@@ -109,10 +118,14 @@ const InventoryDetail = () => {
             setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to view document');
+        } finally {
+            setViewingDocumentId(null);
         }
     };
 
     const handleDownloadDocument = async (doc) => {
+        const docId = doc._id || doc.url || `${doc.fileName}_${doc.category}`;
+        setDownloadingDocumentId(docId);
         try {
             const response = await axiosInstance.get(doc.viewUrl || doc.url, {
                 responseType: 'blob'
@@ -129,6 +142,141 @@ const InventoryDetail = () => {
             setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to download document');
+        } finally {
+            setDownloadingDocumentId(null);
+        }
+    };
+
+    const handleViewPODocument = async (doc) => {
+        const docId = doc.documentId || doc._id;
+        setViewingPODocumentId(docId);
+        try {
+            if (!vehicle?.purchaseOrder?._id) {
+                alert('Purchase order not found');
+                setViewingPODocumentId(null);
+                return;
+            }
+
+            // If content is available directly, use it
+            if (doc.content) {
+                const pdfBase64 = doc.content;
+                const byteCharacters = atob(pdfBase64);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                const blob = new Blob([byteArray], { type: 'application/pdf' });
+                const blobUrl = URL.createObjectURL(blob);
+
+                const newWindow = window.open('', '_blank');
+                if (newWindow && !newWindow.closed) {
+                    const safeTitle = (doc.name || 'Document').replace(/[<>&]/g, '');
+                    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${safeTitle}</title>
+  <style>html,body{height:100%;margin:0} .frame{border:0;width:100%;height:100%;}</style>
+</head>
+<body>
+  <iframe class="frame" src="${blobUrl}" type="application/pdf"></iframe>
+  <noscript>
+    <p>PDF viewer requires JavaScript. <a href="${blobUrl}" target="_blank" rel="noopener">Open PDF</a></p>
+  </noscript>
+</body>
+</html>`;
+                    newWindow.document.open();
+                    newWindow.document.write(html);
+                    newWindow.document.close();
+                } else {
+                    window.open(blobUrl, '_blank');
+                }
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60 * 1000);
+            } else {
+                // Fallback to API endpoint
+                const response = await axiosInstance.get(`/purchases/po/${vehicle.purchaseOrder._id}/documents/${doc.documentId}`, {
+                    responseType: 'arraybuffer',
+                    headers: { Accept: 'application/pdf' }
+                });
+
+                const blob = new Blob([response.data], { type: 'application/pdf' });
+                const blobUrl = URL.createObjectURL(blob);
+
+                const newWindow = window.open('', '_blank');
+                if (newWindow && !newWindow.closed) {
+                    const safeTitle = (doc.name || 'Document').replace(/[<>&]/g, '');
+                    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>${safeTitle}</title>
+  <style>html,body{height:100%;margin:0} .frame{border:0;width:100%;height:100%;}</style>
+</head>
+<body>
+  <iframe class="frame" src="${blobUrl}" type="application/pdf"></iframe>
+  <noscript>
+    <p>PDF viewer requires JavaScript. <a href="${blobUrl}" target="_blank" rel="noopener">Open PDF</a></p>
+  </noscript>
+</body>
+</html>`;
+                    newWindow.document.open();
+                    newWindow.document.write(html);
+                    newWindow.document.close();
+                } else {
+                    window.open(blobUrl, '_blank');
+                }
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60 * 1000);
+            }
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to view document');
+        } finally {
+            setViewingPODocumentId(null);
+        }
+    };
+
+    const handleDownloadPODocument = async (doc) => {
+        const docId = doc.documentId || doc._id;
+        setDownloadingPODocumentId(docId);
+        try {
+            if (!vehicle?.purchaseOrder?._id) {
+                alert('Purchase order not found');
+                setDownloadingPODocumentId(null);
+                return;
+            }
+
+            let blob;
+            // If content is available directly, use it
+            if (doc.content) {
+                const pdfBase64 = doc.content;
+                const byteCharacters = atob(pdfBase64);
+                const byteNumbers = new Array(byteCharacters.length);
+                for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                blob = new Blob([byteArray], { type: 'application/pdf' });
+            } else {
+                // Fallback to API endpoint
+                const response = await axiosInstance.get(`/purchases/po/${vehicle.purchaseOrder._id}/documents/${doc.documentId}`, {
+                    responseType: 'arraybuffer',
+                    headers: { Accept: 'application/pdf' }
+                });
+                blob = new Blob([response.data], { type: 'application/pdf' });
+            }
+
+            const blobUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = `${doc.name || 'PO_Document'}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to download document');
+        } finally {
+            setDownloadingPODocumentId(null);
         }
     };
 
@@ -499,22 +647,38 @@ const InventoryDetail = () => {
                                                                     <div className="flex items-center gap-1 ml-3">
                                                                         <button
                                                                             onClick={() => handleViewDocument(attachment)}
-                                                                            className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                                                                            disabled={viewingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`) || downloadingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`)}
+                                                                            className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                                             title="View"
                                                                         >
-                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                                            </svg>
+                                                                            {viewingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`) ? (
+                                                                                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                </svg>
+                                                                            ) : (
+                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                                                </svg>
+                                                                            )}
                                                                         </button>
                                                                         <button
                                                                             onClick={() => handleDownloadDocument(attachment)}
-                                                                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                                                            disabled={viewingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`) || downloadingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`)}
+                                                                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                                             title="Download"
                                                                         >
-                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                                                            </svg>
+                                                                            {downloadingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`) ? (
+                                                                                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                </svg>
+                                                                            ) : (
+                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                                                </svg>
+                                                                            )}
                                                                         </button>
                                                                     </div>
                                                                 </div>
@@ -539,69 +703,456 @@ const InventoryDetail = () => {
                         {/* Financial Tab */}
                         {activeTab === 'financial' && (
                             <div className="space-y-6">
-                                <div className="bg-gray-50 rounded-lg p-4">
-                                    <h3 className="font-semibold text-gray-900 mb-4">Investment Information</h3>
-                                    {vehicle.investorAllocation && vehicle.investorAllocation.length > 0 ? (
-                                        <div className="space-y-4">
-                                            {vehicle.investorAllocation.map((allocation, index) => (
-                                                <div key={index} className="bg-white border border-gray-200 rounded-lg p-4">
-                                                    <div className="flex justify-between items-center mb-2">
-                                                        <div>
-                                                            <span className="font-medium text-gray-900">
-                                                                {allocation.investorId?.name || vehicle.investor?.name || 'Unknown Investor'}
-                                                            </span>
-                                                            {allocation.investorId?.email && (
-                                                                <div className="text-xs text-gray-500 mt-1">
-                                                                    {allocation.investorId.email}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <span className="text-sm text-gray-600 font-medium">
-                                                            {allocation.percentage}%
-                                                        </span>
-                                                    </div>
-                                                    <div className="text-lg font-semibold text-green-600">
-                                                        AED {allocation.amount?.toLocaleString() || '0'}
-                                                    </div>
+                                {/* Purchase Order Section */}
+                                {vehicle?.purchaseOrder && (
+                                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+                                        <div className="flex items-center gap-3 mb-4">
+                                            <div className="w-10 h-10 rounded-lg bg-blue-200 flex items-center justify-center">
+                                                <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <h3 className="text-lg font-semibold text-blue-900">Purchase Order</h3>
+                                                <div className="text-xs text-blue-700">PO #{vehicle.purchaseOrder.poId}</div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
+                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Status</div>
+                                                <div className="text-sm font-semibold text-gray-900 capitalize">{vehicle.purchaseOrder.status || 'N/A'}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
+                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Total Amount</div>
+                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.purchaseOrder.amount?.toLocaleString() || 'N/A'}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
+                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Transfer Cost (RTA)</div>
+                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.purchaseOrder.transferCost?.toLocaleString() || '0'}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
+                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Detailing / Inspection Cost</div>
+                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.purchaseOrder.detailing_inspection_cost?.toLocaleString() || '0'}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
+                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Agent Commission</div>
+                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.purchaseOrder.agent_commision.toLocaleString()}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
+                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Car Recovery Cost</div>
+                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.purchaseOrder.car_recovery_cost.toLocaleString()}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
+                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Other Charges</div>
+                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.purchaseOrder.other_charges.toLocaleString()}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
+                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Total Investment</div>
+                                                <div className="text-lg font-bold text-blue-900">AED {vehicle.purchaseOrder.total_investment?.toLocaleString() || 'N/A'}</div>
+                                            </div>
+                                            {vehicle.purchaseOrder.prepared_by && (
+                                                <div className="bg-white rounded-lg p-4 border border-blue-200">
+                                                    <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Prepared By</div>
+                                                    <div className="text-sm font-semibold text-gray-900">{vehicle.purchaseOrder.prepared_by}</div>
                                                 </div>
-                                            ))}
-                                            {/* Total Investment */}
-                                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="font-semibold text-gray-900">Total Investment:</span>
-                                                    <span className="text-xl font-bold text-blue-600">
-                                                        AED {vehicle.investorAllocation.reduce((sum, alloc) => sum + (alloc.amount || 0), 0).toLocaleString()}
-                                                    </span>
+                                            )}
+                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
+                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Created Date</div>
+                                                <div className="text-sm font-semibold text-gray-900">
+                                                    {vehicle.purchaseOrder.createdAt ? new Date(vehicle.purchaseOrder.createdAt).toLocaleDateString() : 'N/A'}
                                                 </div>
                                             </div>
                                         </div>
-                                    ) : vehicle.investor ? (
-                                        <div className="bg-white border border-gray-200 rounded-lg p-4">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <div>
-                                                    <span className="font-medium text-gray-900">
-                                                        {vehicle.investor?.name || 'Unknown Investor'}
+
+                                        {/* Investor Allocations */}
+                                        {vehicle.purchaseOrder.investorAllocations && vehicle.purchaseOrder.investorAllocations.length > 0 && (
+                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
+                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-3">Investor Allocations</div>
+                                                <div className="space-y-2">
+                                                    {vehicle.purchaseOrder.investorAllocations.map((allocation, index) => (
+                                                        <div key={index} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                                                            <div>
+                                                                <div className="text-sm font-semibold text-gray-900">
+                                                                    {allocation.investorId?.name || 'Unknown Investor'}
+                                                                </div>
+                                                                <div className="text-xs text-gray-500">
+                                                                    {allocation.investorId?.email || ''}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <div className="text-sm font-semibold text-gray-900">
+                                                                    AED {allocation.amount?.toLocaleString() || '0'}
+                                                                </div>
+                                                                <div className="text-xs text-gray-500">
+                                                                    {allocation.percentage || 0}%
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* DocuSign Status */}
+                                        {vehicle.purchaseOrder.docuSignStatus && (
+                                            <div className="bg-white rounded-lg p-4 border border-blue-200 mt-4">
+                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-2">DocuSign Status</div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${vehicle.purchaseOrder.docuSignStatus === 'completed' ? 'bg-green-100 text-green-800' :
+                                                        vehicle.purchaseOrder.docuSignStatus === 'signed' ? 'bg-green-100 text-green-800' :
+                                                            vehicle.purchaseOrder.docuSignStatus === 'failed' || vehicle.purchaseOrder.docuSignStatus === 'voided' ? 'bg-red-100 text-red-800' :
+                                                                'bg-yellow-100 text-yellow-800'
+                                                        }`}>
+                                                        {vehicle.purchaseOrder.docuSignStatus === 'completed' || vehicle.purchaseOrder.docuSignStatus === 'signed' ? '✓ Signed' :
+                                                            vehicle.purchaseOrder.docuSignStatus === 'failed' ? '✗ Failed' :
+                                                                vehicle.purchaseOrder.docuSignStatus === 'voided' ? '✗ Voided' :
+                                                                    'Pending'}
                                                     </span>
-                                                    {vehicle.investor?.email && (
-                                                        <div className="text-xs text-gray-500 mt-1">
-                                                            {vehicle.investor.email}
+                                                    {vehicle.purchaseOrder.docuSignSignedAt && (
+                                                        <span className="text-xs text-gray-600">
+                                                            Signed on {new Date(vehicle.purchaseOrder.docuSignSignedAt).toLocaleDateString()}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Purchase Order Documents (DocuSign Documents) */}
+                                        {vehicle.purchaseOrder.docuSignDocuments && vehicle.purchaseOrder.docuSignDocuments.length > 0 && (
+                                            <div className="bg-white rounded-lg p-4 border border-blue-200 mt-4">
+                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-3">Purchase Order Documents</div>
+                                                <div className="space-y-2">
+                                                    {vehicle.purchaseOrder.docuSignDocuments.map((doc, index) => (
+                                                        <div key={doc.documentId || index} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                                                    <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                                    </svg>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="text-sm font-medium text-gray-900">{doc.name || 'Purchase Order Document'}</div>
+                                                                    <div className="text-xs text-gray-500">
+                                                                        {doc.fileSize ? `${(doc.fileSize / 1024).toFixed(1)} KB` : 'PDF Document'}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <button
+                                                                    onClick={() => handleViewPODocument(doc)}
+                                                                    disabled={viewingPODocumentId === (doc.documentId || doc._id) || downloadingPODocumentId === (doc.documentId || doc._id)}
+                                                                    className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                >
+                                                                    {viewingPODocumentId === (doc.documentId || doc._id) ? (
+                                                                        <span className="flex items-center gap-1">
+                                                                            <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                            </svg>
+                                                                            Loading...
+                                                                        </span>
+                                                                    ) : (
+                                                                        'View'
+                                                                    )}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDownloadPODocument(doc)}
+                                                                    disabled={viewingPODocumentId === (doc.documentId || doc._id) || downloadingPODocumentId === (doc.documentId || doc._id)}
+                                                                    className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                >
+                                                                    {downloadingPODocumentId === (doc.documentId || doc._id) ? (
+                                                                        <span className="flex items-center gap-1">
+                                                                            <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                            </svg>
+                                                                            Loading...
+                                                                        </span>
+                                                                    ) : (
+                                                                        'Download'
+                                                                    )}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Invoice Section */}
+                                {vehicle?.invoice && (
+                                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-6">
+                                        <div className="flex items-center gap-3 mb-4">
+                                            <div className="w-10 h-10 rounded-lg bg-green-200 flex items-center justify-center">
+                                                <svg className="w-5 h-5 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <h3 className="text-lg font-semibold text-green-900">Invoice</h3>
+                                                <div className="text-xs text-green-700">Invoice #{vehicle.invoice.invoiceNo}</div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                            <div className="bg-white rounded-lg p-4 border border-green-200">
+                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Invoice Number</div>
+                                                <div className="text-sm font-semibold text-gray-900">{vehicle.invoice.invoiceNo || 'N/A'}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-green-200">
+                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Status</div>
+                                                <div className="text-sm font-semibold text-gray-900 capitalize">{vehicle.invoice.status || 'N/A'}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-green-200">
+                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Buying Price</div>
+                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.invoice.totals?.buying_price?.toLocaleString() || '0'}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-green-200">
+                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Transfer Cost (RTA)</div>
+                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.invoice.totals?.transfer_cost_rta?.toLocaleString() || '0'}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-green-200">
+                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Detailing / Inspection Cost</div>
+                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.invoice.totals?.detailing_inspection_cost?.toLocaleString() || '0'}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-green-200">
+                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Agent Commission</div>
+                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.invoice.totals.agent_commission.toLocaleString()}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-green-200">
+                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Car Recovery Cost</div>
+                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.invoice.totals.car_recovery_cost.toLocaleString()}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-green-200">
+                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Other Charges</div>
+                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.invoice.totals.other_charges.toLocaleString()}</div>
+                                            </div>
+                                            <div className="bg-white rounded-lg p-4 border border-green-200 md:col-span-2">
+                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Total Amount Payable</div>
+                                                <div className="text-lg font-bold text-green-900">AED {vehicle.invoice.totals?.total_amount_payable?.toLocaleString() || '0'}</div>
+                                            </div>
+                                            {vehicle.invoice.preparedBy && (
+                                                <div className="bg-white rounded-lg p-4 border border-green-200">
+                                                    <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Prepared By</div>
+                                                    <div className="text-sm font-semibold text-gray-900">{vehicle.invoice.preparedBy}</div>
+                                                </div>
+                                            )}
+                                            <div className="bg-white rounded-lg p-4 border border-green-200">
+                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Sent Date</div>
+                                                <div className="text-sm font-semibold text-gray-900">
+                                                    {vehicle.invoice.sentAt ? new Date(vehicle.invoice.sentAt).toLocaleDateString() :
+                                                        vehicle.invoice.createdAt ? new Date(vehicle.invoice.createdAt).toLocaleDateString() : 'N/A'}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Vehicle Information in Invoice */}
+                                        {vehicle.invoice.vehicle && (
+                                            <div className="bg-white rounded-lg p-4 border border-green-200">
+                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-3">Vehicle Information</div>
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                                    {vehicle.invoice.vehicle.make && (
+                                                        <div>
+                                                            <div className="text-xs text-gray-500 mb-1">Make</div>
+                                                            <div className="text-sm font-semibold text-gray-900">{vehicle.invoice.vehicle.make}</div>
+                                                        </div>
+                                                    )}
+                                                    {vehicle.invoice.vehicle.model && (
+                                                        <div>
+                                                            <div className="text-xs text-gray-500 mb-1">Model</div>
+                                                            <div className="text-sm font-semibold text-gray-900">{vehicle.invoice.vehicle.model}</div>
+                                                        </div>
+                                                    )}
+                                                    {vehicle.invoice.vehicle.year && (
+                                                        <div>
+                                                            <div className="text-xs text-gray-500 mb-1">Year</div>
+                                                            <div className="text-sm font-semibold text-gray-900">{vehicle.invoice.vehicle.year}</div>
+                                                        </div>
+                                                    )}
+                                                    {vehicle.invoice.vehicle.vin && (
+                                                        <div>
+                                                            <div className="text-xs text-gray-500 mb-1">VIN</div>
+                                                            <div className="text-sm font-mono text-gray-900">{vehicle.invoice.vehicle.vin}</div>
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
-                                            {vehicle.purchasePrice && (
-                                                <div className="text-lg font-semibold text-green-600">
-                                                    AED {vehicle.purchasePrice.toLocaleString()}
+                                        )}
+
+                                        {/* Invoice Documents */}
+                                        {vehicle.invoice.content && (
+                                            <div className="bg-white rounded-lg p-4 border border-green-200 mt-4">
+                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-3">Invoice Documents</div>
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                                                                <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                                </svg>
+                                                            </div>
+                                                            <div>
+                                                                <div className="text-sm font-medium text-gray-900">Invoice #{vehicle.invoice.invoiceNo}</div>
+                                                                <div className="text-xs text-gray-500">
+                                                                    {vehicle.invoice.fileSize ? `${(vehicle.invoice.fileSize / 1024).toFixed(1)} KB` : 'PDF Document'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={async () => {
+                                                                    setViewingInvoice(true);
+                                                                    try {
+                                                                        const pdfBase64 = vehicle.invoice.content;
+                                                                        const byteCharacters = atob(pdfBase64);
+                                                                        const byteNumbers = new Array(byteCharacters.length);
+                                                                        for (let i = 0; i < byteCharacters.length; i++) {
+                                                                            byteNumbers[i] = byteCharacters.charCodeAt(i);
+                                                                        }
+                                                                        const byteArray = new Uint8Array(byteNumbers);
+                                                                        const blob = new Blob([byteArray], { type: 'application/pdf' });
+                                                                        const blobUrl = URL.createObjectURL(blob);
+                                                                        window.open(blobUrl, '_blank');
+                                                                        setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+                                                                    } catch (err) {
+                                                                        alert(err.response?.data?.message || 'Failed to view invoice');
+                                                                    } finally {
+                                                                        setViewingInvoice(false);
+                                                                    }
+                                                                }}
+                                                                disabled={viewingInvoice || downloadingInvoice}
+                                                                className="px-3 py-1.5 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                {viewingInvoice ? (
+                                                                    <span className="flex items-center gap-1">
+                                                                        <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                        </svg>
+                                                                        Loading...
+                                                                    </span>
+                                                                ) : (
+                                                                    'View'
+                                                                )}
+                                                            </button>
+                                                            <button
+                                                                onClick={async () => {
+                                                                    setDownloadingInvoice(true);
+                                                                    try {
+                                                                        const pdfBase64 = vehicle.invoice.content;
+                                                                        const byteCharacters = atob(pdfBase64);
+                                                                        const byteNumbers = new Array(byteCharacters.length);
+                                                                        for (let i = 0; i < byteCharacters.length; i++) {
+                                                                            byteNumbers[i] = byteCharacters.charCodeAt(i);
+                                                                        }
+                                                                        const byteArray = new Uint8Array(byteNumbers);
+                                                                        const blob = new Blob([byteArray], { type: 'application/pdf' });
+                                                                        const blobUrl = URL.createObjectURL(blob);
+                                                                        const link = document.createElement('a');
+                                                                        link.href = blobUrl;
+                                                                        link.download = `Invoice_${vehicle.invoice.invoiceNo || 'invoice'}.pdf`;
+                                                                        document.body.appendChild(link);
+                                                                        link.click();
+                                                                        document.body.removeChild(link);
+                                                                        setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+                                                                    } catch (err) {
+                                                                        alert(err.response?.data?.message || 'Failed to download invoice');
+                                                                    } finally {
+                                                                        setDownloadingInvoice(false);
+                                                                    }
+                                                                }}
+                                                                disabled={viewingInvoice || downloadingInvoice}
+                                                                className="px-3 py-1.5 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                {downloadingInvoice ? (
+                                                                    <span className="flex items-center gap-1">
+                                                                        <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                        </svg>
+                                                                        Loading...
+                                                                    </span>
+                                                                ) : (
+                                                                    'Download'
+                                                                )}
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            )}
-                                            <div className="text-xs text-gray-500 mt-2">
-                                                Investment details from Purchase Order pending
                                             </div>
-                                        </div>
-                                    ) : (
-                                        <p className="text-gray-500 text-sm">No investment information available</p>
-                                    )}
-                                </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Investment Information (Fallback) */}
+                                {!vehicle?.purchaseOrder && !vehicle?.invoice && (
+                                    <div className="bg-gray-50 rounded-lg p-4">
+                                        <h3 className="font-semibold text-gray-900 mb-4">Investment Information</h3>
+                                        {vehicle.investorAllocation && vehicle.investorAllocation.length > 0 ? (
+                                            <div className="space-y-4">
+                                                {vehicle.investorAllocation.map((allocation, index) => (
+                                                    <div key={index} className="bg-white border border-gray-200 rounded-lg p-4">
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <div>
+                                                                <span className="font-medium text-gray-900">
+                                                                    {allocation.investorId?.name || vehicle.investor?.name || 'Unknown Investor'}
+                                                                </span>
+                                                                {allocation.investorId?.email && (
+                                                                    <div className="text-xs text-gray-500 mt-1">
+                                                                        {allocation.investorId.email}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <span className="text-sm text-gray-600 font-medium">
+                                                                {allocation.percentage}%
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-lg font-semibold text-green-600">
+                                                            AED {allocation.amount?.toLocaleString() || '0'}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {/* Total Investment */}
+                                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="font-semibold text-gray-900">Total Investment:</span>
+                                                        <span className="text-xl font-bold text-blue-600">
+                                                            AED {vehicle.investorAllocation.reduce((sum, alloc) => sum + (alloc.amount || 0), 0).toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : vehicle.investor ? (
+                                            <div className="bg-white border border-gray-200 rounded-lg p-4">
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <div>
+                                                        <span className="font-medium text-gray-900">
+                                                            {vehicle.investor?.name || 'Unknown Investor'}
+                                                        </span>
+                                                        {vehicle.investor?.email && (
+                                                            <div className="text-xs text-gray-500 mt-1">
+                                                                {vehicle.investor.email}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                {vehicle.purchasePrice && (
+                                                    <div className="text-lg font-semibold text-green-600">
+                                                        AED {vehicle.purchasePrice.toLocaleString()}
+                                                    </div>
+                                                )}
+                                                <div className="text-xs text-gray-500 mt-2">
+                                                    Investment details from Purchase Order pending
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <p className="text-gray-500 text-sm">No financial information available</p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>

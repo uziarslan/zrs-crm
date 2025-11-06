@@ -63,6 +63,12 @@ const InspectionDetail = () => {
     });
     const [viewingDocumentId, setViewingDocumentId] = useState(null);
     const [downloadingDocumentId, setDownloadingDocumentId] = useState(null);
+    const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+    const [invoicePaymentDetails, setInvoicePaymentDetails] = useState({
+        modeOfPayment: '',
+        paymentReceivedBy: ''
+    });
+    const [admins, setAdmins] = useState([]);
 
     const documentCategories = [
         { key: 'inspectionReport', label: 'Inspection Report', accept: '.pdf', multiple: false, IconComponent: InspectionReportIcon },
@@ -89,6 +95,22 @@ const InspectionDetail = () => {
             }
         };
         loadInvestors();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    useEffect(() => {
+        // Load admins list for invoice payment received by dropdown
+        const loadAdmins = async () => {
+            try {
+                if (user?.role === 'admin') {
+                    const res = await axiosInstance.get('/admin/admins');
+                    setAdmins(res.data.data || []);
+                }
+            } catch (e) {
+                // silent fail
+            }
+        };
+        loadAdmins();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -338,38 +360,8 @@ const InspectionDetail = () => {
         setShowDeleteDocModal(true);
     };
 
-    const handleSendTestInvoice = async () => {
-        try {
-            if (!lead?.purchaseOrder?._id) {
-                alert('Purchase order not found');
-                return;
-            }
-            await axiosInstance.post(`/purchases/po/${lead.purchaseOrder._id}/invoice/test`);
-            alert('Test invoice email sent to investor');
-        } catch (err) {
-            alert(err.response?.data?.message || 'Failed to send test invoice');
-        }
-    };
 
-    const handlePreviewInvoice = async () => {
-        try {
-            const url = lead?._id
-                ? `/purchases/invoices/preview?leadId=${lead._id}`
-                : `/purchases/invoices/preview`;
-            const response = await axiosInstance.get(url, { responseType: 'blob' });
-            const blob = new Blob([response.data], { type: 'application/pdf' });
-            const blobUrl = URL.createObjectURL(blob);
-            const win = window.open('', '_blank');
-            if (win) {
-                win.location = blobUrl;
-            } else {
-                window.open(blobUrl, '_blank');
-            }
-            setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60 * 1000);
-        } catch (err) {
-            alert(err.response?.data?.message || 'Failed to preview invoice');
-        }
-    };
+    // Preview invoice removed per requirements
 
     const confirmDeleteDocument = async () => {
         if (!documentToDelete) return;
@@ -651,17 +643,38 @@ const InspectionDetail = () => {
     };
 
     const handlePurchase = () => {
-        setShowPurchaseModal(true);
+        // Reset payment details and show invoice modal
+        setInvoicePaymentDetails({
+            modeOfPayment: '',
+            paymentReceivedBy: ''
+        });
+        setShowInvoiceModal(true);
     };
 
     const confirmPurchase = async () => {
+        if (!invoicePaymentDetails.modeOfPayment) {
+            alert('Please select mode of payment');
+            return;
+        }
+        if (!invoicePaymentDetails.paymentReceivedBy) {
+            alert('Please select who received the payment');
+            return;
+        }
+
         setPurchasing(true);
         try {
-            const response = await axiosInstance.post(`/purchases/leads/${id}/purchase`);
+            const response = await axiosInstance.post(`/purchases/leads/${id}/purchase`, {
+                modeOfPayment: invoicePaymentDetails.modeOfPayment,
+                paymentReceivedBy: invoicePaymentDetails.paymentReceivedBy
+            });
             if (response.data.success) {
                 await fetchLead();
-                setShowPurchaseModal(false);
-                alert('Lead converted to vehicle successfully');
+                setShowInvoiceModal(false);
+                setInvoicePaymentDetails({
+                    modeOfPayment: '',
+                    paymentReceivedBy: ''
+                });
+                alert('Lead converted to vehicle successfully and invoice sent to investor');
             }
         } catch (error) {
             console.error('Purchase error:', error);
@@ -1558,18 +1571,6 @@ const InspectionDetail = () => {
                                                                             'View'
                                                                         )}
                                                                     </button>
-                                                                    <button
-                                                                        onClick={handleSendTestInvoice}
-                                                                        className="px-3 py-1.5 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors"
-                                                                    >
-                                                                        Send Test Invoice
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={handlePreviewInvoice}
-                                                                        className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors"
-                                                                    >
-                                                                        Preview Invoice
-                                                                    </button>
                                                                 </div>
                                                             </div>
                                                         ))}
@@ -2057,6 +2058,104 @@ const InspectionDetail = () => {
                         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end rounded-b-xl">
                             <button onClick={() => setShowPOFieldsModal(false)} disabled={savingPOFields} className={`px-4 py-2 text-sm font-medium rounded-lg ${savingPOFields ? 'bg-white text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}>Cancel</button>
                             <button onClick={isSubmittedForApproval() ? submitPOFieldsAndApprove : submitPOFieldsAndSubmitForApproval} disabled={savingPOFields} className={`px-4 py-2 text-sm font-medium rounded-lg ${savingPOFields ? 'bg-primary-400 text-white cursor-not-allowed' : 'bg-primary-600 text-white hover:bg-primary-700'}`}>{savingPOFields ? 'Saving...' : isSubmittedForApproval() ? 'Save & Approve' : 'Save & Submit for Approval'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Invoice Payment Details Modal */}
+            {showInvoiceModal && (
+                <div
+                    className="fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+                    onClick={() => !purchasing && setShowInvoiceModal(false)}
+                >
+                    <div
+                        className="relative bg-white rounded-xl shadow-2xl w-full max-w-md"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-6 py-5 border-b border-gray-200">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-semibold text-gray-900">Invoice Payment Details</h3>
+                                {!purchasing && (
+                                    <button
+                                        onClick={() => setShowInvoiceModal(false)}
+                                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
+                            <p className="mt-1 text-sm text-gray-500">Please provide payment details for the invoice.</p>
+                        </div>
+                        <div className="px-6 py-5 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Mode of Payment <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                    value={invoicePaymentDetails.modeOfPayment}
+                                    onChange={(e) => setInvoicePaymentDetails({ ...invoicePaymentDetails, modeOfPayment: e.target.value })}
+                                    disabled={purchasing}
+                                    className={`w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${purchasing ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                >
+                                    <option value="">Select mode of payment...</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                    <option value="Cash">Cash</option>
+                                    <option value="Cheque">Cheque</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Payment Received By <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                    value={invoicePaymentDetails.paymentReceivedBy}
+                                    onChange={(e) => setInvoicePaymentDetails({ ...invoicePaymentDetails, paymentReceivedBy: e.target.value })}
+                                    disabled={purchasing}
+                                    className={`w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${purchasing ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                >
+                                    <option value="">Select admin...</option>
+                                    {admins.map(admin => (
+                                        <option key={admin._id} value={admin.name || admin.email}>
+                                            {admin.name || admin.email}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end rounded-b-xl">
+                            <button
+                                onClick={() => setShowInvoiceModal(false)}
+                                disabled={purchasing}
+                                className={`px-4 py-2 text-sm font-medium rounded-lg ${purchasing
+                                    ? 'bg-white text-gray-400 cursor-not-allowed'
+                                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                                    }`}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmPurchase}
+                                disabled={purchasing || !invoicePaymentDetails.modeOfPayment || !invoicePaymentDetails.paymentReceivedBy}
+                                className={`px-4 py-2 text-sm font-medium rounded-lg ${purchasing || !invoicePaymentDetails.modeOfPayment || !invoicePaymentDetails.paymentReceivedBy
+                                    ? 'bg-primary-400 text-white cursor-not-allowed'
+                                    : 'bg-primary-600 text-white hover:bg-primary-700'
+                                    }`}
+                            >
+                                {purchasing ? (
+                                    <span className="flex items-center gap-2">
+                                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Processing...
+                                    </span>
+                                ) : (
+                                    'Purchase Vehicle'
+                                )}
+                            </button>
                         </div>
                     </div>
                 </div>

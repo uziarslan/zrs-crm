@@ -258,8 +258,8 @@ const PurchaseLeads = () => {
                   onClick={handleBulkStatusUpdate}
                   disabled={!bulkStatus}
                   className={`inline-flex items-center px-5 py-2.5 text-sm font-semibold rounded-lg shadow-md transition-all ${bulkStatus
-                    ? 'text-white bg-primary-600 hover:bg-primary-700 hover:shadow-lg'
-                    : 'text-gray-400 bg-gray-200 cursor-not-allowed'
+                      ? 'text-white bg-primary-600 hover:bg-primary-700 hover:shadow-lg'
+                      : 'text-gray-400 bg-gray-200 cursor-not-allowed'
                     }`}
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

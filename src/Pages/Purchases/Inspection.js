@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
 import { useAuth } from '../../Context/AuthContext';
-import ConfirmDialog from '../../Components/ConfirmDialog';
 
 const Inspection = () => {
     const { user } = useAuth();
@@ -15,10 +14,18 @@ const Inspection = () => {
     const [bulkStatus, setBulkStatus] = useState('');
     const [showBulkBar, setShowBulkBar] = useState(false);
     const [purchasing, setPurchasing] = useState(false);
-    const [showPurchaseModal, setShowPurchaseModal] = useState(false);
     const [leadToPurchase, setLeadToPurchase] = useState(null);
     const [showDocumentWarningModal, setShowDocumentWarningModal] = useState(false);
     const [leadsWithoutDocs, setLeadsWithoutDocs] = useState([]);
+    const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+    const [showBulkInvoiceModal, setShowBulkInvoiceModal] = useState(false);
+    const [invoicePaymentDetails, setInvoicePaymentDetails] = useState({
+        modeOfPayment: '',
+        paymentReceivedBy: ''
+    });
+    const [leadInvoiceData, setLeadInvoiceData] = useState({});
+    const [isBulkPurchasing, setIsBulkPurchasing] = useState(false);
+    const [admins, setAdmins] = useState([]);
 
     useEffect(() => {
         fetchLeads();
@@ -28,6 +35,22 @@ const Inspection = () => {
     useEffect(() => {
         setShowBulkBar(selectedLeads.length > 0);
     }, [selectedLeads]);
+
+    useEffect(() => {
+        // Load admins list for invoice payment received by dropdown
+        const loadAdmins = async () => {
+            try {
+                if (user?.role === 'admin') {
+                    const res = await axiosInstance.get('/admin/admins');
+                    setAdmins(res.data.data || []);
+                }
+            } catch (e) {
+                // silent fail
+            }
+        };
+        loadAdmins();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const fetchLeads = async () => {
         try {
@@ -93,6 +116,21 @@ const Inspection = () => {
             return;
         }
 
+        // If status is inventory, show bulk invoice modal
+        if (bulkStatus === 'inventory') {
+            // Initialize invoice data for each selected lead
+            const initialData = {};
+            selectedLeads.forEach(leadId => {
+                initialData[leadId] = {
+                    modeOfPayment: '',
+                    paymentReceivedBy: ''
+                };
+            });
+            setLeadInvoiceData(initialData);
+            setShowBulkInvoiceModal(true);
+            return;
+        }
+
         // Check if any selected leads don't meet the requirements for the target status
         if (bulkStatus === 'converted') {
             const selectedLeadObjects = leads.filter(lead => selectedLeads.includes(lead._id));
@@ -130,21 +168,112 @@ const Inspection = () => {
         }
 
         setLeadToPurchase(leadId);
-        setShowPurchaseModal(true);
+        setInvoicePaymentDetails({
+            modeOfPayment: '',
+            paymentReceivedBy: ''
+        });
+        setShowInvoiceModal(true);
     };
 
     const confirmPurchase = async () => {
+        if (!invoicePaymentDetails.modeOfPayment) {
+            alert('Please select mode of payment');
+            return;
+        }
+        if (!invoicePaymentDetails.paymentReceivedBy) {
+            alert('Please select who received the payment');
+            return;
+        }
+
         setPurchasing(true);
         try {
-            await axiosInstance.post(`/purchases/leads/${leadToPurchase}/purchase`);
-            alert('Lead successfully converted to vehicle and purchase order created!');
-            setShowPurchaseModal(false);
+            await axiosInstance.post(`/purchases/leads/${leadToPurchase}/purchase`, {
+                modeOfPayment: invoicePaymentDetails.modeOfPayment,
+                paymentReceivedBy: invoicePaymentDetails.paymentReceivedBy
+            });
+            alert('Lead successfully converted to vehicle and invoice sent to investor!');
+            setShowInvoiceModal(false);
             setLeadToPurchase(null);
+            setInvoicePaymentDetails({
+                modeOfPayment: '',
+                paymentReceivedBy: ''
+            });
             fetchLeads(); // Refresh the list
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to purchase vehicle');
         } finally {
             setPurchasing(false);
+        }
+    };
+
+    const handleLeadInvoiceChange = (leadId, field, value) => {
+        setLeadInvoiceData(prev => ({
+            ...prev,
+            [leadId]: {
+                ...prev[leadId],
+                [field]: value
+            }
+        }));
+    };
+
+    const handleBulkPurchase = async () => {
+        // Filter only leads with 100% progress
+        const readyLeads = selectedLeads.filter(leadId => {
+            const lead = leads.find(l => l._id === leadId);
+            const progress = getProgressInfo(lead);
+            return progress.percentage === 100;
+        });
+
+        if (readyLeads.length === 0) {
+            alert('No leads are ready for purchase. All selected leads must have 100% progress (4/4 steps completed).');
+            return;
+        }
+
+        // Validate all ready leads have payment details
+        const missingFields = [];
+        readyLeads.forEach(leadId => {
+            const data = leadInvoiceData[leadId] || {};
+            if (!data.modeOfPayment || !data.paymentReceivedBy) {
+                const lead = leads.find(l => l._id === leadId);
+                missingFields.push(lead?.leadId || leadId);
+            }
+        });
+
+        if (missingFields.length > 0) {
+            alert(`Please fill in payment details for all ready leads. Missing: ${missingFields.join(', ')}`);
+            return;
+        }
+
+        setIsBulkPurchasing(true);
+        try {
+            const leadsData = readyLeads.map(leadId => ({
+                leadId,
+                modeOfPayment: leadInvoiceData[leadId]?.modeOfPayment,
+                paymentReceivedBy: leadInvoiceData[leadId]?.paymentReceivedBy
+            }));
+
+            const response = await axiosInstance.post('/purchases/leads/bulk-purchase', {
+                leads: leadsData
+            });
+
+            if (response.data.success) {
+                const successCount = response.data.data?.successful?.length || 0;
+                const errorCount = response.data.data?.errors?.length || 0;
+                const skippedCount = selectedLeads.length - readyLeads.length;
+                let message = `Successfully purchased ${successCount} lead(s)`;
+                if (errorCount > 0) message += `, ${errorCount} failed`;
+                if (skippedCount > 0) message += `, ${skippedCount} skipped (not ready)`;
+                alert(message);
+                setShowBulkInvoiceModal(false);
+                setLeadInvoiceData({});
+                setSelectedLeads([]);
+                setBulkStatus('');
+                fetchLeads();
+            }
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to bulk purchase');
+        } finally {
+            setIsBulkPurchasing(false);
         }
     };
 
@@ -324,8 +453,8 @@ const Inspection = () => {
                                         className="border-gray-300 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-primary-500 focus:border-primary-500 shadow-sm"
                                     >
                                         <option value="">Choose...</option>
-                                        <option value="converted">Convert to Vehicle</option>
-                                        <option value="negotiation">Move to Negotiation</option>
+                                        <option value="inventory">Move to Inventory</option>
+                                        <option value="negotiation">Rollback to Negotiation</option>
                                         <option value="cancelled">Cancel Lead</option>
                                     </select>
                                 </div>
@@ -615,22 +744,278 @@ const Inspection = () => {
                 </div>
             )}
 
-            <ConfirmDialog
-                isOpen={showPurchaseModal}
-                onClose={() => {
-                    if (!purchasing) {
-                        setShowPurchaseModal(false);
-                        setLeadToPurchase(null);
-                    }
-                }}
-                onConfirm={confirmPurchase}
-                title="Purchase Vehicle"
-                message={`Are you sure you want to convert this lead to a vehicle? This will create a purchase order and move the vehicle to inventory. This action cannot be undone.`}
-                confirmText="Purchase Vehicle"
-                cancelText="Cancel"
-                isLoading={purchasing}
-                danger={false}
-            />
+            {/* Single Purchase Invoice Modal */}
+            {showInvoiceModal && (
+                <div
+                    className="fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+                    onClick={() => !purchasing && setShowInvoiceModal(false)}
+                >
+                    <div
+                        className="relative bg-white rounded-xl shadow-2xl w-full max-w-md"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="px-6 py-5 border-b border-gray-200">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-lg font-semibold text-gray-900">Invoice Payment Details</h3>
+                                {!purchasing && (
+                                    <button
+                                        onClick={() => setShowInvoiceModal(false)}
+                                        className="text-gray-400 hover:text-gray-600 transition-colors"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
+                            <p className="mt-1 text-sm text-gray-500">Please provide payment details for the invoice.</p>
+                        </div>
+                        <div className="px-6 py-5 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Mode of Payment <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                    value={invoicePaymentDetails.modeOfPayment}
+                                    onChange={(e) => setInvoicePaymentDetails({ ...invoicePaymentDetails, modeOfPayment: e.target.value })}
+                                    disabled={purchasing}
+                                    className={`w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${purchasing ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                >
+                                    <option value="">Select mode of payment...</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                    <option value="Cash">Cash</option>
+                                    <option value="Cheque">Cheque</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Payment Received By <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                    value={invoicePaymentDetails.paymentReceivedBy}
+                                    onChange={(e) => setInvoicePaymentDetails({ ...invoicePaymentDetails, paymentReceivedBy: e.target.value })}
+                                    disabled={purchasing}
+                                    className={`w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${purchasing ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                                >
+                                    <option value="">Select admin...</option>
+                                    {admins.map(admin => (
+                                        <option key={admin._id} value={admin.name || admin.email}>
+                                            {admin.name || admin.email}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end rounded-b-xl">
+                            <button
+                                onClick={() => setShowInvoiceModal(false)}
+                                disabled={purchasing}
+                                className={`px-4 py-2 text-sm font-medium rounded-lg ${purchasing
+                                    ? 'bg-white text-gray-400 cursor-not-allowed'
+                                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                                    }`}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmPurchase}
+                                disabled={purchasing || !invoicePaymentDetails.modeOfPayment || !invoicePaymentDetails.paymentReceivedBy}
+                                className={`px-4 py-2 text-sm font-medium rounded-lg ${purchasing || !invoicePaymentDetails.modeOfPayment || !invoicePaymentDetails.paymentReceivedBy
+                                    ? 'bg-primary-400 text-white cursor-not-allowed'
+                                    : 'bg-primary-600 text-white hover:bg-primary-700'
+                                    }`}
+                            >
+                                {purchasing ? (
+                                    <span className="flex items-center gap-2">
+                                        <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Processing...
+                                    </span>
+                                ) : (
+                                    'Purchase Vehicle'
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Bulk Purchase Invoice Modal */}
+            {showBulkInvoiceModal && (() => {
+                const readyLeadsCount = selectedLeads.filter(leadId => {
+                    const lead = leads.find(l => l._id === leadId);
+                    const progress = getProgressInfo(lead);
+                    return progress.percentage === 100;
+                }).length;
+                const totalCount = selectedLeads.length;
+
+                return (
+                    <div
+                        className="fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+                        onClick={() => !isBulkPurchasing && setShowBulkInvoiceModal(false)}
+                    >
+                        <div
+                            className="relative bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="px-6 py-5 border-b border-gray-200 flex-shrink-0">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-gray-900">Invoice Payment Details for Bulk Purchase</h3>
+                                        <p className="mt-1 text-sm text-gray-500">
+                                            {readyLeadsCount === totalCount
+                                                ? `Enter payment details for ${readyLeadsCount} selected lead(s)`
+                                                : `Enter payment details for ${readyLeadsCount} ready lead(s) (${totalCount - readyLeadsCount} not ready)`
+                                            }
+                                        </p>
+                                    </div>
+                                    {!isBulkPurchasing && (
+                                        <button
+                                            onClick={() => setShowBulkInvoiceModal(false)}
+                                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="px-6 py-5 space-y-6 overflow-y-auto flex-1">
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <div className="flex items-start gap-2">
+                                        <svg className="w-4 h-4 text-blue-600 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                                        </svg>
+                                        <div className="text-xs text-blue-700">
+                                            <strong>Note:</strong> Please fill in the payment details for each lead. All fields are required. Once all required fields are filled, click "Purchase All Leads" to convert them to inventory.
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-gray-200">
+                                            <thead className="bg-gray-50">
+                                                <tr>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Lead & Vehicle</th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Mode of Payment <span className="text-red-500">*</span></th>
+                                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Payment Received By <span className="text-red-500">*</span></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-gray-200">
+                                                {selectedLeads.map((leadId) => {
+                                                    const lead = leads.find(l => l._id === leadId);
+                                                    const leadData = leadInvoiceData[leadId] || { modeOfPayment: '', paymentReceivedBy: '' };
+                                                    const progress = getProgressInfo(lead);
+                                                    const isComplete = progress.percentage === 100;
+
+                                                    return (
+                                                        <tr key={leadId} className={isComplete ? "hover:bg-gray-50" : "bg-yellow-50"}>
+                                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                                <div>
+                                                                    <div className="text-sm font-semibold text-primary-600">{lead?.leadId || 'N/A'}</div>
+                                                                    <div className="text-xs text-gray-500">
+                                                                        {lead?.vehicleInfo?.make} {lead?.vehicleInfo?.model} {lead?.vehicleInfo?.year}
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            {isComplete ? (
+                                                                <>
+                                                                    <td className="px-4 py-3">
+                                                                        <select
+                                                                            value={leadData.modeOfPayment || ''}
+                                                                            onChange={(e) => handleLeadInvoiceChange(leadId, 'modeOfPayment', e.target.value)}
+                                                                            disabled={isBulkPurchasing}
+                                                                            className={`w-full px-2 py-1.5 text-xs border rounded ${isBulkPurchasing ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200' : 'border-gray-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500'}`}
+                                                                        >
+                                                                            <option value="">Select...</option>
+                                                                            <option value="Bank Transfer">Bank Transfer</option>
+                                                                            <option value="Cash">Cash</option>
+                                                                            <option value="Cheque">Cheque</option>
+                                                                        </select>
+                                                                    </td>
+                                                                    <td className="px-4 py-3">
+                                                                        <select
+                                                                            value={leadData.paymentReceivedBy || ''}
+                                                                            onChange={(e) => handleLeadInvoiceChange(leadId, 'paymentReceivedBy', e.target.value)}
+                                                                            disabled={isBulkPurchasing}
+                                                                            className={`w-full px-2 py-1.5 text-xs border rounded ${isBulkPurchasing ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200' : 'border-gray-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500'}`}
+                                                                        >
+                                                                            <option value="">Select admin...</option>
+                                                                            {admins.map(admin => (
+                                                                                <option key={admin._id} value={admin.name || admin.email}>
+                                                                                    {admin.name || admin.email}
+                                                                                </option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </td>
+                                                                </>
+                                                            ) : (
+                                                                <td colSpan="2" className="px-4 py-3">
+                                                                    <div className="flex items-center gap-2 text-xs text-yellow-700">
+                                                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                                                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                                        </svg>
+                                                                        <span className="font-medium">Not ready for purchase</span>
+                                                                        <span className="text-yellow-600">({progress.completedSteps}/{progress.totalSteps} steps completed - Awaiting: {progress.currentStep})</span>
+                                                                    </div>
+                                                                </td>
+                                                            )}
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end rounded-b-xl flex-shrink-0">
+                                <button
+                                    onClick={() => {
+                                        if (!isBulkPurchasing) {
+                                            setShowBulkInvoiceModal(false);
+                                            setLeadInvoiceData({});
+                                            setBulkStatus('');
+                                        }
+                                    }}
+                                    disabled={isBulkPurchasing}
+                                    className={`px-4 py-2 text-sm font-medium rounded-lg ${isBulkPurchasing
+                                        ? 'bg-white text-gray-400 cursor-not-allowed'
+                                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleBulkPurchase}
+                                    disabled={isBulkPurchasing || readyLeadsCount === 0}
+                                    className={`px-4 py-2 text-sm font-medium rounded-lg ${isBulkPurchasing || readyLeadsCount === 0
+                                        ? 'bg-primary-400 text-white cursor-not-allowed'
+                                        : 'bg-primary-600 text-white hover:bg-primary-700'
+                                        }`}
+                                >
+                                    {isBulkPurchasing ? (
+                                        <span className="flex items-center gap-2">
+                                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            Processing...
+                                        </span>
+                                    ) : (
+                                        readyLeadsCount > 0 ? `Purchase ${readyLeadsCount} Lead(s)` : 'No Leads Ready'
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </DashboardLayout>
     );
 };
