@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
 import { useAuth } from '../../Context/AuthContext';
+import ConfirmDialog from '../../Components/ConfirmDialog';
 
 // Import SVG icons
 import detailingIcon from '../../assets/icons/detailing.svg';
@@ -28,6 +29,11 @@ const InventoryDetail = () => {
     const [downloadingInvoice, setDownloadingInvoice] = useState(false);
     const [viewingDocumentId, setViewingDocumentId] = useState(null);
     const [downloadingDocumentId, setDownloadingDocumentId] = useState(null);
+    const [uploadingInvoiceEvidence, setUploadingInvoiceEvidence] = useState({});
+    const [deletingInvoiceEvidence, setDeletingInvoiceEvidence] = useState({});
+    const [viewingInvoiceEvidence, setViewingInvoiceEvidence] = useState({});
+    const [showDeleteEvidenceModal, setShowDeleteEvidenceModal] = useState(false);
+    const [costTypeToDelete, setCostTypeToDelete] = useState(null);
 
     const checklistItems = [
         { key: 'detailing', label: 'Detailing', iconSrc: detailingIcon },
@@ -284,6 +290,100 @@ const InventoryDetail = () => {
         if (bytes < 1024) return bytes + ' B';
         if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB';
         return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    };
+
+    const handleUploadInvoiceEvidence = async (costType, file) => {
+        if (!vehicle?.purchaseOrder?._id) {
+            alert('Purchase order not found');
+            return;
+        }
+
+        if (!file) {
+            alert('Please select a file');
+            return;
+        }
+
+        setUploadingInvoiceEvidence(prev => ({ ...prev, [costType]: true }));
+        try {
+            const formData = new FormData();
+            formData.append('invoice', file);
+
+            await axiosInstance.post(
+                `/purchases/po/${vehicle.purchaseOrder._id}/cost-invoice-evidence/${costType}`,
+                formData,
+                {
+                    headers: {
+                        'Content-Type': 'multipart/form-data'
+                    }
+                }
+            );
+
+            await fetchVehicle(false);
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to upload invoice evidence');
+        } finally {
+            setUploadingInvoiceEvidence(prev => ({ ...prev, [costType]: false }));
+        }
+    };
+
+    const handleDeleteInvoiceEvidence = (costType) => {
+        setCostTypeToDelete(costType);
+        setShowDeleteEvidenceModal(true);
+    };
+
+    const confirmDeleteInvoiceEvidence = async () => {
+        if (!vehicle?.purchaseOrder?._id || !costTypeToDelete) {
+            alert('Purchase order not found');
+            setShowDeleteEvidenceModal(false);
+            setCostTypeToDelete(null);
+            return;
+        }
+
+        setDeletingInvoiceEvidence(prev => ({ ...prev, [costTypeToDelete]: true }));
+        try {
+            await axiosInstance.delete(
+                `/purchases/po/${vehicle.purchaseOrder._id}/cost-invoice-evidence/${costTypeToDelete}`
+            );
+
+            await fetchVehicle(false);
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to delete invoice evidence');
+        } finally {
+            setDeletingInvoiceEvidence(prev => ({ ...prev, [costTypeToDelete]: false }));
+            setShowDeleteEvidenceModal(false);
+            setCostTypeToDelete(null);
+        }
+    };
+
+    const handleViewInvoiceEvidence = async (evidence) => {
+        if (!evidence?.url) {
+            alert('Document not available');
+            return;
+        }
+
+        setViewingInvoiceEvidence(prev => ({ ...prev, [evidence.costType]: true }));
+        try {
+            if (evidence.fileType !== 'application/pdf') {
+                // For images, open directly
+                window.open(evidence.url, '_blank');
+                setViewingInvoiceEvidence(prev => ({ ...prev, [evidence.costType]: false }));
+                return;
+            }
+
+            // For PDFs, fetch as blob and create blob URL for inline viewing
+            const response = await axiosInstance.get(evidence.url, {
+                responseType: 'blob'
+            });
+
+            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const blobUrl = URL.createObjectURL(blob);
+            window.open(blobUrl, '_blank');
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+            setViewingInvoiceEvidence(prev => ({ ...prev, [evidence.costType]: false }));
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to view invoice evidence');
+            setViewingInvoiceEvidence(prev => ({ ...prev, [evidence.costType]: false }));
+        }
     };
 
     const isChecklistComplete = () => {
@@ -703,127 +803,287 @@ const InventoryDetail = () => {
                         {/* Financial Tab */}
                         {activeTab === 'financial' && (
                             <div className="space-y-6">
-                                {/* Purchase Order Section */}
-                                {vehicle?.purchaseOrder && (
-                                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+                                {/* Purchase Order Cost Fields with Invoice Evidence */}
+                                {vehicle?.purchaseOrder && vehicle?.invoices && (() => {
+                                    const po = vehicle.purchaseOrder;
+                                    const invoices = vehicle.invoices || [];
+                                    
+                                    // Map cost type to investor assignment field in PurchaseOrder
+                                    const costTypeToInvestorField = {
+                                        'transferCost': 'transferCostInvestor',
+                                        'detailingInspectionCost': 'detailingInspectionCostInvestor',
+                                        'agentCommission': 'agentCommissionInvestor',
+                                        'carRecoveryCost': 'carRecoveryCostInvestor',
+                                        'otherCharges': 'otherChargesInvestor'
+                                    };
+
+                                    // Helper function to find invoice for a cost type
+                                    const findInvoiceForCost = (costType) => {
+                                        const investorField = costTypeToInvestorField[costType];
+                                        const responsibleInvestorId = po[investorField];
+                                        if (!responsibleInvestorId) return null;
+                                        
+                                        const investorIdStr = typeof responsibleInvestorId === 'object' 
+                                            ? responsibleInvestorId._id?.toString() || responsibleInvestorId.toString()
+                                            : responsibleInvestorId.toString();
+                                        
+                                        return invoices.find(inv => {
+                                            const invInvestorId = inv.investorId?._id?.toString() || inv.investorId?.toString();
+                                            return invInvestorId === investorIdStr;
+                                        });
+                                    };
+
+                                    const costFields = [
+                                        {
+                                            key: 'transferCost',
+                                            label: 'Transfer Cost (RTA)',
+                                            value: po.transferCost || 0,
+                                            investorField: 'transferCostInvestor',
+                                            invoice: findInvoiceForCost('transferCost')
+                                        },
+                                        {
+                                            key: 'detailingInspectionCost',
+                                            label: 'Detailing / Inspection Cost',
+                                            value: po.detailing_inspection_cost || 0,
+                                            investorField: 'detailingInspectionCostInvestor',
+                                            invoice: findInvoiceForCost('detailingInspectionCost')
+                                        },
+                                        {
+                                            key: 'agentCommission',
+                                            label: 'Agent Commission',
+                                            value: po.agent_commision || 0,
+                                            investorField: 'agentCommissionInvestor',
+                                            invoice: findInvoiceForCost('agentCommission')
+                                        },
+                                        {
+                                            key: 'carRecoveryCost',
+                                            label: 'Car Recovery Cost',
+                                            value: po.car_recovery_cost || 0,
+                                            investorField: 'carRecoveryCostInvestor',
+                                            invoice: findInvoiceForCost('carRecoveryCost')
+                                        },
+                                        {
+                                            key: 'otherCharges',
+                                            label: 'Other Charges',
+                                            value: po.other_charges || 0,
+                                            investorField: 'otherChargesInvestor',
+                                            invoice: findInvoiceForCost('otherCharges')
+                                        }
+                                    ].filter(field => field.value > 0).map(field => ({
+                                        ...field,
+                                        evidence: field.invoice?.costInvoiceEvidence?.[field.key] || null,
+                                        investorName: field.invoice?.investorId?.name || 'Unknown Investor'
+                                    }));
+
+                                    return costFields.length > 0 ? (
+                                        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-6">
                                         <div className="flex items-center gap-3 mb-4">
-                                            <div className="w-10 h-10 rounded-lg bg-blue-200 flex items-center justify-center">
-                                                <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <div className="w-10 h-10 rounded-lg bg-indigo-200 flex items-center justify-center">
+                                                    <svg className="w-5 h-5 text-indigo-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                                 </svg>
                                             </div>
                                             <div>
-                                                <h3 className="text-lg font-semibold text-blue-900">Purchase Order</h3>
-                                                <div className="text-xs text-blue-700">PO #{vehicle.purchaseOrder.poId}</div>
+                                                    <h3 className="text-lg font-semibold text-indigo-900">Cost Invoice Evidence</h3>
+                                                    <div className="text-xs text-indigo-700">Upload invoice evidence for each cost field</div>
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
-                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Status</div>
-                                                <div className="text-sm font-semibold text-gray-900 capitalize">{vehicle.purchaseOrder.status || 'N/A'}</div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {costFields.map((field) => {
+                                                    const isUploading = uploadingInvoiceEvidence[field.key];
+                                                    const isDeleting = deletingInvoiceEvidence[field.key];
+                                                    const isViewing = viewingInvoiceEvidence[field.key];
+                                                    const hasEvidence = field.evidence?.url;
+
+                                                    return (
+                                                        <div key={field.key} className="bg-white rounded-lg p-4 border border-indigo-200">
+                                                            <div className="flex items-center justify-between mb-3">
+                                                                <div>
+                                                                    <div className="text-sm font-semibold text-gray-900">{field.label}</div>
+                                                                    <div className="text-lg font-bold text-indigo-700">AED {field.value.toLocaleString()}</div>
+                                                                    {field.invoice && (
+                                                                        <div className="text-xs text-gray-500 mt-1">
+                                                                            Invoice: {field.invoice.invoiceNo} • {field.investorName}
                                             </div>
-                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
-                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Total Amount</div>
-                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.purchaseOrder.amount?.toLocaleString() || 'N/A'}</div>
+                                                                    )}
                                             </div>
-                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
-                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Transfer Cost (RTA)</div>
-                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.purchaseOrder.transferCost?.toLocaleString() || '0'}</div>
+                                                                {hasEvidence && (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <button
+                                                                            onClick={() => handleViewInvoiceEvidence({ ...field.evidence, costType: field.key })}
+                                                                            disabled={isViewing}
+                                                                            className="px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                        >
+                                                                            {isViewing ? (
+                                                                                <span className="flex items-center gap-1">
+                                                                                    <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                    </svg>
+                                                                                    Viewing...
+                                                                                </span>
+                                                                            ) : (
+                                                                                'View'
+                                                                            )}
+                                                                        </button>
+                                                                        {user?.role === 'admin' && (
+                                                                            <button
+                                                                                onClick={() => handleDeleteInvoiceEvidence(field.key)}
+                                                                                disabled={isDeleting}
+                                                                                className="px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                            >
+                                                                                {isDeleting ? (
+                                                                                    <span className="flex items-center gap-1">
+                                                                                        <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                        </svg>
+                                                                                        Deleting...
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    'Delete'
+                                                                                )}
+                                                                            </button>
+                                                                        )}
                                             </div>
-                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
-                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Detailing / Inspection Cost</div>
-                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.purchaseOrder.detailing_inspection_cost?.toLocaleString() || '0'}</div>
+                                                                )}
                                             </div>
-                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
-                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Agent Commission</div>
-                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.purchaseOrder.agent_commision.toLocaleString()}</div>
+
+                                                            {hasEvidence ? (
+                                                                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                                                                    <div className="flex items-center gap-2 mb-2">
+                                                                        <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                                                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                                                        </svg>
+                                                                        <span className="text-xs font-medium text-green-700">Invoice Evidence Uploaded</span>
                                             </div>
-                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
-                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Car Recovery Cost</div>
-                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.purchaseOrder.car_recovery_cost.toLocaleString()}</div>
+                                                                    <div className="text-xs text-green-600 truncate">{field.evidence.fileName}</div>
+                                                                    <div className="text-xs text-green-500 mt-1">
+                                                                        {field.evidence.fileSize ? formatFileSize(field.evidence.fileSize) : ''}
+                                                                        {field.evidence.uploadedAt && ` • ${new Date(field.evidence.uploadedAt).toLocaleDateString()}`}
                                             </div>
-                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
-                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Other Charges</div>
-                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.purchaseOrder.other_charges.toLocaleString()}</div>
                                             </div>
-                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
-                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Total Investment</div>
-                                                <div className="text-lg font-bold text-blue-900">AED {vehicle.purchaseOrder.total_investment?.toLocaleString() || 'N/A'}</div>
-                                            </div>
-                                            {vehicle.purchaseOrder.prepared_by && (
-                                                <div className="bg-white rounded-lg p-4 border border-blue-200">
-                                                    <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Prepared By</div>
-                                                    <div className="text-sm font-semibold text-gray-900">{vehicle.purchaseOrder.prepared_by}</div>
+                                                            ) : (
+                                                                <div>
+                                                                    <input
+                                                                        type="file"
+                                                                        id={`invoice-evidence-${field.key}`}
+                                                                        accept=".pdf,.png,.jpg,.jpeg"
+                                                                        onChange={(e) => {
+                                                                            const file = e.target.files[0];
+                                                                            if (file) {
+                                                                                handleUploadInvoiceEvidence(field.key, file);
+                                                                                e.target.value = ''; // Reset input
+                                                                            }
+                                                                        }}
+                                                                        disabled={isUploading}
+                                                                        className="hidden"
+                                                                    />
+                                                                    <label
+                                                                        htmlFor={`invoice-evidence-${field.key}`}
+                                                                        className={`flex items-center justify-center gap-2 cursor-pointer px-4 py-2.5 border-2 border-dashed rounded-lg transition-all ${isUploading
+                                                                            ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-50'
+                                                                            : 'border-indigo-300 bg-indigo-50 hover:border-indigo-400 hover:bg-indigo-100'
+                                                                            }`}
+                                                                    >
+                                                                        {isUploading ? (
+                                                                            <>
+                                                                                <svg className="animate-spin h-4 w-4 text-indigo-600" fill="none" viewBox="0 0 24 24">
+                                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                </svg>
+                                                                                <span className="text-sm font-medium text-indigo-600">Uploading...</span>
+                                                                            </>
+                                                                        ) : (
+                                                                            <>
+                                                                                <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                                                                </svg>
+                                                                                <span className="text-sm font-medium text-indigo-600">Upload Invoice Evidence</span>
+                                                                            </>
+                                                                        )}
+                                                                    </label>
                                                 </div>
                                             )}
-                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
-                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-1">Created Date</div>
-                                                <div className="text-sm font-semibold text-gray-900">
-                                                    {vehicle.purchaseOrder.createdAt ? new Date(vehicle.purchaseOrder.createdAt).toLocaleDateString() : 'N/A'}
                                                 </div>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
+                                    ) : null;
+                                })()}
 
-                                        {/* Investor Allocations */}
-                                        {vehicle.purchaseOrder.investorAllocations && vehicle.purchaseOrder.investorAllocations.length > 0 && (
-                                            <div className="bg-white rounded-lg p-4 border border-blue-200">
-                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-3">Investor Allocations</div>
-                                                <div className="space-y-2">
-                                                    {vehicle.purchaseOrder.investorAllocations.map((allocation, index) => (
-                                                        <div key={index} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                                {/* Purchase Order Section - Grouped by Investor */}
+                                {vehicle?.purchaseOrder && (() => {
+                                    // Group PO documents by investor
+                                    const poDocsByInvestor = {};
+                                    const allocations = vehicle.purchaseOrder.investorAllocations || [];
+                                    
+                                    if (vehicle.purchaseOrder.docuSignDocuments) {
+                                        vehicle.purchaseOrder.docuSignDocuments.forEach(doc => {
+                                            const investorId = doc.investorId?._id || doc.investorId;
+                                            if (investorId) {
+                                                const key = investorId.toString();
+                                                if (!poDocsByInvestor[key]) {
+                                                    poDocsByInvestor[key] = [];
+                                                }
+                                                poDocsByInvestor[key].push(doc);
+                                            }
+                                        });
+                                    }
+
+                                    // Get all unique investors from allocations
+                                    const investors = allocations.map(alloc => {
+                                        const investorId = alloc.investorId?._id || alloc.investorId;
+                                        return {
+                                            id: investorId?.toString() || '',
+                                            name: alloc.investorId?.name || 'Unknown Investor',
+                                            email: alloc.investorId?.email || '',
+                                            allocation: alloc,
+                                            documents: poDocsByInvestor[investorId?.toString()] || []
+                                        };
+                                    }).filter(inv => inv.id);
+
+                                    return investors.length > 0 ? (
+                                        <div className="space-y-6">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-lg bg-blue-200 flex items-center justify-center">
+                                                    <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                    </svg>
+                                                </div>
                                                             <div>
-                                                                <div className="text-sm font-semibold text-gray-900">
-                                                                    {allocation.investorId?.name || 'Unknown Investor'}
+                                                    <h3 className="text-lg font-semibold text-blue-900">Purchase Orders</h3>
+                                                    <div className="text-xs text-blue-700">PO #{vehicle.purchaseOrder.poId} • {investors.length} {investors.length === 1 ? 'Investor' : 'Investors'}</div>
                                                                 </div>
-                                                                <div className="text-xs text-gray-500">
-                                                                    {allocation.investorId?.email || ''}
                                                                 </div>
+
+                                            {investors.map((investor) => (
+                                                <div key={investor.id} className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+                                                    <div className="flex items-center justify-between mb-4">
+                                                        <div>
+                                                            <h4 className="text-base font-semibold text-blue-900">{investor.name}</h4>
+                                                            {investor.email && (
+                                                                <div className="text-xs text-blue-700">{investor.email}</div>
+                                                            )}
                                                             </div>
                                                             <div className="text-right">
-                                                                <div className="text-sm font-semibold text-gray-900">
-                                                                    AED {allocation.amount?.toLocaleString() || '0'}
+                                                            <div className="text-sm font-semibold text-blue-900">
+                                                                AED {investor.allocation.amount?.toLocaleString() || '0'}
                                                                 </div>
-                                                                <div className="text-xs text-gray-500">
-                                                                    {allocation.percentage || 0}%
+                                                            <div className="text-xs text-blue-700">
+                                                                {investor.allocation.percentage || 0}% allocation
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
 
-                                        {/* DocuSign Status */}
-                                        {vehicle.purchaseOrder.docuSignStatus && (
-                                            <div className="bg-white rounded-lg p-4 border border-blue-200 mt-4">
-                                                <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-2">DocuSign Status</div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${vehicle.purchaseOrder.docuSignStatus === 'completed' ? 'bg-green-100 text-green-800' :
-                                                        vehicle.purchaseOrder.docuSignStatus === 'signed' ? 'bg-green-100 text-green-800' :
-                                                            vehicle.purchaseOrder.docuSignStatus === 'failed' || vehicle.purchaseOrder.docuSignStatus === 'voided' ? 'bg-red-100 text-red-800' :
-                                                                'bg-yellow-100 text-yellow-800'
-                                                        }`}>
-                                                        {vehicle.purchaseOrder.docuSignStatus === 'completed' || vehicle.purchaseOrder.docuSignStatus === 'signed' ? '✓ Signed' :
-                                                            vehicle.purchaseOrder.docuSignStatus === 'failed' ? '✗ Failed' :
-                                                                vehicle.purchaseOrder.docuSignStatus === 'voided' ? '✗ Voided' :
-                                                                    'Pending'}
-                                                    </span>
-                                                    {vehicle.purchaseOrder.docuSignSignedAt && (
-                                                        <span className="text-xs text-gray-600">
-                                                            Signed on {new Date(vehicle.purchaseOrder.docuSignSignedAt).toLocaleDateString()}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Purchase Order Documents (DocuSign Documents) */}
-                                        {vehicle.purchaseOrder.docuSignDocuments && vehicle.purchaseOrder.docuSignDocuments.length > 0 && (
-                                            <div className="bg-white rounded-lg p-4 border border-blue-200 mt-4">
+                                                    {/* Investor-specific PO Documents */}
+                                                    {investor.documents.length > 0 ? (
+                                                        <div className="bg-white rounded-lg p-4 border border-blue-200">
                                                 <div className="text-xs font-medium text-blue-600 uppercase tracking-wider mb-3">Purchase Order Documents</div>
                                                 <div className="space-y-2">
-                                                    {vehicle.purchaseOrder.docuSignDocuments.map((doc, index) => (
+                                                                {investor.documents.map((doc, index) => (
                                                         <div key={doc.documentId || index} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
                                                             <div className="flex items-center gap-3">
                                                                 <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -878,115 +1138,103 @@ const InventoryDetail = () => {
                                                     ))}
                                                 </div>
                                             </div>
-                                        )}
+                                                    ) : (
+                                                        <div className="bg-white rounded-lg p-4 border border-blue-200 text-center text-sm text-gray-500">
+                                                            No purchase order documents available for this investor yet.
                                     </div>
                                 )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : null;
+                                })()}
 
-                                {/* Invoice Section */}
-                                {vehicle?.invoice && (
-                                    <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-6">
-                                        <div className="flex items-center gap-3 mb-4">
+                                {/* Invoice Section - Grouped by Investor */}
+                                {(() => {
+                                    const invoices = vehicle?.invoices || (vehicle?.invoice ? [vehicle.invoice] : []);
+                                    if (invoices.length === 0) return null;
+
+                                    return (
+                                        <div className="space-y-6">
+                                            <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-lg bg-green-200 flex items-center justify-center">
                                                 <svg className="w-5 h-5 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                                 </svg>
                                             </div>
                                             <div>
-                                                <h3 className="text-lg font-semibold text-green-900">Invoice</h3>
-                                                <div className="text-xs text-green-700">Invoice #{vehicle.invoice.invoiceNo}</div>
+                                                    <h3 className="text-lg font-semibold text-green-900">Invoices</h3>
+                                                    <div className="text-xs text-green-700">{invoices.length} {invoices.length === 1 ? 'Invoice' : 'Invoices'}</div>
                                             </div>
                                         </div>
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                            <div className="bg-white rounded-lg p-4 border border-green-200">
-                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Invoice Number</div>
-                                                <div className="text-sm font-semibold text-gray-900">{vehicle.invoice.invoiceNo || 'N/A'}</div>
+                                            {invoices.map((invoice) => {
+                                                const investorName = invoice.investorId?.name || 'Unknown Investor';
+                                                const investorEmail = invoice.investorId?.email || '';
+
+                                                return (
+                                                    <div key={invoice._id || invoice.invoiceNo} className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-6">
+                                                        <div className="flex items-center justify-between mb-4">
+                                                            <div>
+                                                                <h4 className="text-base font-semibold text-green-900">{investorName}</h4>
+                                                                {investorEmail && (
+                                                                    <div className="text-xs text-green-700">{investorEmail}</div>
+                                                                )}
                                             </div>
-                                            <div className="bg-white rounded-lg p-4 border border-green-200">
-                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Status</div>
-                                                <div className="text-sm font-semibold text-gray-900 capitalize">{vehicle.invoice.status || 'N/A'}</div>
+                                                            <div className="text-right">
+                                                                <div className="text-sm font-semibold text-green-900">Invoice #{invoice.invoiceNo}</div>
+                                                                <div className="text-xs text-green-700 capitalize">{invoice.status || 'N/A'}</div>
                                             </div>
+                                                        </div>
+
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                             <div className="bg-white rounded-lg p-4 border border-green-200">
                                                 <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Buying Price</div>
-                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.invoice.totals?.buying_price?.toLocaleString() || '0'}</div>
+                                                                <div className="text-sm font-semibold text-gray-900">AED {invoice.totals?.buying_price?.toLocaleString() || '0'}</div>
                                             </div>
                                             <div className="bg-white rounded-lg p-4 border border-green-200">
                                                 <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Transfer Cost (RTA)</div>
-                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.invoice.totals?.transfer_cost_rta?.toLocaleString() || '0'}</div>
+                                                                <div className="text-sm font-semibold text-gray-900">AED {invoice.totals?.transfer_cost_rta?.toLocaleString() || '0'}</div>
                                             </div>
                                             <div className="bg-white rounded-lg p-4 border border-green-200">
                                                 <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Detailing / Inspection Cost</div>
-                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.invoice.totals?.detailing_inspection_cost?.toLocaleString() || '0'}</div>
+                                                                <div className="text-sm font-semibold text-gray-900">AED {invoice.totals?.detailing_inspection_cost?.toLocaleString() || '0'}</div>
                                             </div>
                                             <div className="bg-white rounded-lg p-4 border border-green-200">
                                                 <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Agent Commission</div>
-                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.invoice.totals.agent_commission.toLocaleString()}</div>
+                                                                <div className="text-sm font-semibold text-gray-900">AED {(invoice.totals?.agent_commission || 0).toLocaleString()}</div>
                                             </div>
                                             <div className="bg-white rounded-lg p-4 border border-green-200">
                                                 <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Car Recovery Cost</div>
-                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.invoice.totals.car_recovery_cost.toLocaleString()}</div>
+                                                                <div className="text-sm font-semibold text-gray-900">AED {(invoice.totals?.car_recovery_cost || 0).toLocaleString()}</div>
                                             </div>
                                             <div className="bg-white rounded-lg p-4 border border-green-200">
                                                 <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Other Charges</div>
-                                                <div className="text-sm font-semibold text-gray-900">AED {vehicle.invoice.totals.other_charges.toLocaleString()}</div>
+                                                                <div className="text-sm font-semibold text-gray-900">AED {(invoice.totals?.other_charges || 0).toLocaleString()}</div>
                                             </div>
                                             <div className="bg-white rounded-lg p-4 border border-green-200 md:col-span-2">
                                                 <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Total Amount Payable</div>
-                                                <div className="text-lg font-bold text-green-900">AED {vehicle.invoice.totals?.total_amount_payable?.toLocaleString() || '0'}</div>
+                                                                <div className="text-lg font-bold text-green-900">AED {invoice.totals?.total_amount_payable?.toLocaleString() || '0'}</div>
                                             </div>
-                                            {vehicle.invoice.preparedBy && (
+                                                            {invoice.preparedBy && (
                                                 <div className="bg-white rounded-lg p-4 border border-green-200">
                                                     <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Prepared By</div>
-                                                    <div className="text-sm font-semibold text-gray-900">{vehicle.invoice.preparedBy}</div>
+                                                                    <div className="text-sm font-semibold text-gray-900">{invoice.preparedBy}</div>
                                                 </div>
                                             )}
                                             <div className="bg-white rounded-lg p-4 border border-green-200">
                                                 <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-1">Sent Date</div>
                                                 <div className="text-sm font-semibold text-gray-900">
-                                                    {vehicle.invoice.sentAt ? new Date(vehicle.invoice.sentAt).toLocaleDateString() :
-                                                        vehicle.invoice.createdAt ? new Date(vehicle.invoice.createdAt).toLocaleDateString() : 'N/A'}
+                                                                    {invoice.sentAt ? new Date(invoice.sentAt).toLocaleDateString() :
+                                                                        invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString() : 'N/A'}
                                                 </div>
                                             </div>
                                         </div>
 
-                                        {/* Vehicle Information in Invoice */}
-                                        {vehicle.invoice.vehicle && (
+                                                        {/* Invoice Document */}
+                                                        {invoice.content && (
                                             <div className="bg-white rounded-lg p-4 border border-green-200">
-                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-3">Vehicle Information</div>
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                                    {vehicle.invoice.vehicle.make && (
-                                                        <div>
-                                                            <div className="text-xs text-gray-500 mb-1">Make</div>
-                                                            <div className="text-sm font-semibold text-gray-900">{vehicle.invoice.vehicle.make}</div>
-                                                        </div>
-                                                    )}
-                                                    {vehicle.invoice.vehicle.model && (
-                                                        <div>
-                                                            <div className="text-xs text-gray-500 mb-1">Model</div>
-                                                            <div className="text-sm font-semibold text-gray-900">{vehicle.invoice.vehicle.model}</div>
-                                                        </div>
-                                                    )}
-                                                    {vehicle.invoice.vehicle.year && (
-                                                        <div>
-                                                            <div className="text-xs text-gray-500 mb-1">Year</div>
-                                                            <div className="text-sm font-semibold text-gray-900">{vehicle.invoice.vehicle.year}</div>
-                                                        </div>
-                                                    )}
-                                                    {vehicle.invoice.vehicle.vin && (
-                                                        <div>
-                                                            <div className="text-xs text-gray-500 mb-1">VIN</div>
-                                                            <div className="text-sm font-mono text-gray-900">{vehicle.invoice.vehicle.vin}</div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Invoice Documents */}
-                                        {vehicle.invoice.content && (
-                                            <div className="bg-white rounded-lg p-4 border border-green-200 mt-4">
-                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-3">Invoice Documents</div>
-                                                <div className="space-y-2">
+                                                                <div className="text-xs font-medium text-green-600 uppercase tracking-wider mb-3">Invoice Document</div>
                                                     <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
@@ -995,9 +1243,9 @@ const InventoryDetail = () => {
                                                                 </svg>
                                                             </div>
                                                             <div>
-                                                                <div className="text-sm font-medium text-gray-900">Invoice #{vehicle.invoice.invoiceNo}</div>
+                                                                            <div className="text-sm font-medium text-gray-900">Invoice #{invoice.invoiceNo}</div>
                                                                 <div className="text-xs text-gray-500">
-                                                                    {vehicle.invoice.fileSize ? `${(vehicle.invoice.fileSize / 1024).toFixed(1)} KB` : 'PDF Document'}
+                                                                                {invoice.fileSize ? `${(invoice.fileSize / 1024).toFixed(1)} KB` : 'PDF Document'}
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -1006,7 +1254,7 @@ const InventoryDetail = () => {
                                                                 onClick={async () => {
                                                                     setViewingInvoice(true);
                                                                     try {
-                                                                        const pdfBase64 = vehicle.invoice.content;
+                                                                                    const pdfBase64 = invoice.content;
                                                                         const byteCharacters = atob(pdfBase64);
                                                                         const byteNumbers = new Array(byteCharacters.length);
                                                                         for (let i = 0; i < byteCharacters.length; i++) {
@@ -1042,7 +1290,7 @@ const InventoryDetail = () => {
                                                                 onClick={async () => {
                                                                     setDownloadingInvoice(true);
                                                                     try {
-                                                                        const pdfBase64 = vehicle.invoice.content;
+                                                                                    const pdfBase64 = invoice.content;
                                                                         const byteCharacters = atob(pdfBase64);
                                                                         const byteNumbers = new Array(byteCharacters.length);
                                                                         for (let i = 0; i < byteCharacters.length; i++) {
@@ -1053,7 +1301,7 @@ const InventoryDetail = () => {
                                                                         const blobUrl = URL.createObjectURL(blob);
                                                                         const link = document.createElement('a');
                                                                         link.href = blobUrl;
-                                                                        link.download = `Invoice_${vehicle.invoice.invoiceNo || 'invoice'}.pdf`;
+                                                                                    link.download = `Invoice_${invoice.invoiceNo || 'invoice'}.pdf`;
                                                                         document.body.appendChild(link);
                                                                         link.click();
                                                                         document.body.removeChild(link);
@@ -1079,16 +1327,19 @@ const InventoryDetail = () => {
                                                                     'Download'
                                                                 )}
                                                             </button>
-                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         )}
                                     </div>
-                                )}
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })()}
 
                                 {/* Investment Information (Fallback) */}
-                                {!vehicle?.purchaseOrder && !vehicle?.invoice && (
+                                {!vehicle?.purchaseOrder && (!vehicle?.invoice && (!vehicle?.invoices || vehicle.invoices.length === 0)) && (
                                     <div className="bg-gray-50 rounded-lg p-4">
                                         <h3 className="font-semibold text-gray-900 mb-4">Investment Information</h3>
                                         {vehicle.investorAllocation && vehicle.investorAllocation.length > 0 ? (
@@ -1158,6 +1409,23 @@ const InventoryDetail = () => {
                     </div>
                 </div>
             </div>
+
+            <ConfirmDialog
+                isOpen={showDeleteEvidenceModal}
+                onClose={() => {
+                    if (!deletingInvoiceEvidence[costTypeToDelete]) {
+                        setShowDeleteEvidenceModal(false);
+                        setCostTypeToDelete(null);
+                    }
+                }}
+                onConfirm={confirmDeleteInvoiceEvidence}
+                title="Delete Invoice Evidence"
+                message="Are you sure you want to delete this invoice evidence? This action cannot be undone."
+                confirmText="Delete"
+                cancelText="Cancel"
+                isLoading={costTypeToDelete ? deletingInvoiceEvidence[costTypeToDelete] : false}
+                danger={true}
+            />
         </DashboardLayout>
     );
 };

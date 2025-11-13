@@ -51,18 +51,6 @@ const SalesLeads = () => {
     }
   };
 
-  const getStatusColor = (status) => {
-    const colors = {
-      new: 'bg-blue-100 text-blue-800',
-      contacted: 'bg-purple-100 text-purple-800',
-      qualified: 'bg-indigo-100 text-indigo-800',
-      negotiation: 'bg-yellow-100 text-yellow-800',
-      converted: 'bg-green-100 text-green-800',
-      lost: 'bg-red-100 text-red-800'
-    };
-    return colors[status] || 'bg-gray-100 text-gray-800';
-  };
-
   if (loading) {
     return (
       <DashboardLayout title="Sales Leads">
@@ -116,16 +104,21 @@ const SalesLeads = () => {
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-lg shadow overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lead ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Priority</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Make</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Model</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Year</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Mileage</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Color</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trim</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Region</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">VIN</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asking Price</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Purchased Final Price</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
@@ -135,29 +128,35 @@ const SalesLeads = () => {
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="text-sm font-medium text-primary-600">{lead.leadId}</span>
                 </td>
-                <td className="px-6 py-4">
-                  <div className="text-sm font-medium text-gray-900">{lead.contactInfo.name}</div>
-                  <div className="text-sm text-gray-500">{lead.contactInfo.phone}</div>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {lead.vehicleInfo?.make || '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(lead.status)}`}>
-                    {lead.status}
-                  </span>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {lead.vehicleInfo?.model || '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 py-1 text-xs font-semibold ${lead.priority === 'urgent' ? 'text-red-600' :
-                    lead.priority === 'high' ? 'text-orange-600' :
-                      lead.priority === 'medium' ? 'text-yellow-600' :
-                        'text-gray-600'
-                    }`}>
-                    {lead.priority}
-                  </span>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {lead.vehicleInfo?.year || '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {lead.source}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {lead.vehicleInfo?.mileage ? `${lead.vehicleInfo.mileage.toLocaleString()} km` : '-'}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(lead.createdAt).toLocaleDateString()}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {lead.vehicleInfo?.color || '-'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {lead.vehicleInfo?.trim || '-'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {lead.vehicleInfo?.region || '-'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {lead.vehicleInfo?.vin || '-'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {lead.vehicleInfo?.askingPrice ? `AED ${lead.vehicleInfo.askingPrice.toLocaleString()}` : '-'}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {lead.priceAnalysis?.purchasedFinalPrice ? `AED ${lead.priceAnalysis.purchasedFinalPrice.toLocaleString()}` : '-'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   <Link
