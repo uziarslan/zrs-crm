@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
@@ -20,12 +20,13 @@ const Inspection = () => {
     const [showInvoiceModal, setShowInvoiceModal] = useState(false);
     const [showBulkInvoiceModal, setShowBulkInvoiceModal] = useState(false);
     const [invoicePaymentDetails, setInvoicePaymentDetails] = useState({
-        modeOfPayment: '',
         paymentReceivedBy: ''
     });
+    const [perInvestorPayments, setPerInvestorPayments] = useState({});
     const [leadInvoiceData, setLeadInvoiceData] = useState({});
     const [isBulkPurchasing, setIsBulkPurchasing] = useState(false);
     const [admins, setAdmins] = useState([]);
+    const [investors, setInvestors] = useState([]);
 
     useEffect(() => {
         fetchLeads();
@@ -38,19 +39,42 @@ const Inspection = () => {
 
     useEffect(() => {
         // Load admins list for invoice payment received by dropdown
-        const loadAdmins = async () => {
+        const loadAdminsAndInvestors = async () => {
             try {
                 if (user?.role === 'admin') {
-                    const res = await axiosInstance.get('/admin/admins');
-                    setAdmins(res.data.data || []);
+                    const [adminRes, investorRes] = await Promise.all([
+                        axiosInstance.get('/admin/admins'),
+                        axiosInstance.get('/purchases/investors')
+                    ]);
+                    setAdmins(adminRes.data.data || []);
+                    setInvestors(investorRes.data.data || []);
                 }
             } catch (e) {
                 // silent fail
             }
         };
-        loadAdmins();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        loadAdminsAndInvestors();
+    }, [user]);
+
+    useEffect(() => {
+        if (user?.role !== 'admin') {
+            const loadInvestorsForManagers = async () => {
+                try {
+                    const res = await axiosInstance.get('/purchases/investors');
+                    setInvestors(res.data.data || []);
+                } catch (e) {
+                    // silent fail
+                }
+            };
+            loadInvestorsForManagers();
+        }
+    }, [user]);
+
+    useEffect(() => {
+        if (!showInvoiceModal) {
+            setPerInvestorPayments({});
+        }
+    }, [showInvoiceModal]);
 
     const fetchLeads = async () => {
         try {
@@ -169,35 +193,83 @@ const Inspection = () => {
 
         setLeadToPurchase(leadId);
         setInvoicePaymentDetails({
-            modeOfPayment: '',
             paymentReceivedBy: ''
         });
+        setPerInvestorPayments({});
         setShowInvoiceModal(true);
     };
 
-    const confirmPurchase = async () => {
-        if (!invoicePaymentDetails.modeOfPayment) {
-            alert('Please select mode of payment');
-            return;
+    const resolveInvestorDetails = useCallback((allocation) => {
+        if (!allocation) {
+            return { id: undefined, name: 'Investor', email: '' };
         }
+        let investorDoc = null;
+        if (allocation.investorId && typeof allocation.investorId === 'object' && '_id' in allocation.investorId) {
+            investorDoc = allocation.investorId;
+        }
+        const investorId = investorDoc?._id
+            ? investorDoc._id.toString()
+            : allocation.investorId != null && typeof allocation.investorId !== 'object'
+                ? allocation.investorId.toString()
+                : undefined;
+        const fromList = investorId ? investors.find(inv => inv._id === investorId) : null;
+        const fallback = investorDoc || allocation.investor || {};
+        return {
+            id: investorId,
+            name: fromList?.name || fallback?.name || allocation?.name || 'Investor',
+            email: fromList?.email || fallback?.email || allocation?.email || ''
+        };
+    }, [investors]);
+
+    const confirmPurchase = async () => {
         if (!invoicePaymentDetails.paymentReceivedBy) {
             alert('Please select who received the payment');
+            return;
+        }
+
+        const lead = leads.find(l => l._id === leadToPurchase);
+        if (!lead) {
+            alert('Lead not found');
+            return;
+        }
+
+        const allocations = Array.isArray(lead.investorAllocations) ? lead.investorAllocations : [];
+
+        if (allocations.length === 0) {
+            alert('No investors assigned to this lead.');
+            return;
+        }
+
+        const perInvestorPayload = allocations
+            .map((allocation) => {
+                const details = resolveInvestorDetails(allocation);
+                if (!details.id) return null;
+                return {
+                    investorId: details.id,
+                    modeOfPayment: perInvestorPayments[details.id]?.modeOfPayment || '',
+                    paymentReceivedBy: invoicePaymentDetails.paymentReceivedBy || ''
+                };
+            })
+            .filter(Boolean);
+
+        if (perInvestorPayload.some(entry => !entry.modeOfPayment || !entry.paymentReceivedBy)) {
+            alert('Please ensure every investor has a mode of payment and payment received by.');
             return;
         }
 
         setPurchasing(true);
         try {
             await axiosInstance.post(`/purchases/leads/${leadToPurchase}/purchase`, {
-                modeOfPayment: invoicePaymentDetails.modeOfPayment,
-                paymentReceivedBy: invoicePaymentDetails.paymentReceivedBy
+                paymentReceivedBy: invoicePaymentDetails.paymentReceivedBy,
+                investorPayments: perInvestorPayload
             });
             alert('Lead successfully converted to vehicle and invoice sent to investor!');
             setShowInvoiceModal(false);
             setLeadToPurchase(null);
             setInvoicePaymentDetails({
-                modeOfPayment: '',
                 paymentReceivedBy: ''
             });
+            setPerInvestorPayments({});
             fetchLeads(); // Refresh the list
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to purchase vehicle');
@@ -311,6 +383,19 @@ const Inspection = () => {
             steps
         };
     };
+
+    const modalLead = showInvoiceModal ? leads.find(lead => lead._id === leadToPurchase) : null;
+    const modalInvestorAllocations = modalLead?.investorAllocations || [];
+    const hasModalInvestors = modalInvestorAllocations.length > 0;
+    const allModalInvestorsHavePayment = hasModalInvestors && modalInvestorAllocations.every((allocation) => {
+        const details = resolveInvestorDetails(allocation);
+        if (!details.id) return false;
+        return Boolean(perInvestorPayments[details.id]?.modeOfPayment);
+    });
+    const canSubmitSinglePurchase = hasModalInvestors
+        && Boolean(invoicePaymentDetails.paymentReceivedBy)
+        && allModalInvestorsHavePayment
+        && !purchasing;
 
     if (loading) {
         return (
@@ -751,7 +836,7 @@ const Inspection = () => {
                     onClick={() => !purchasing && setShowInvoiceModal(false)}
                 >
                     <div
-                        className="relative bg-white rounded-xl shadow-2xl w-full max-w-md"
+                        className="relative bg-white rounded-xl shadow-2xl w-full max-w-5xl"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="px-6 py-5 border-b border-gray-200">
@@ -773,22 +858,6 @@ const Inspection = () => {
                         <div className="px-6 py-5 space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Mode of Payment <span className="text-red-500">*</span>
-                                </label>
-                                <select
-                                    value={invoicePaymentDetails.modeOfPayment}
-                                    onChange={(e) => setInvoicePaymentDetails({ ...invoicePaymentDetails, modeOfPayment: e.target.value })}
-                                    disabled={purchasing}
-                                    className={`w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${purchasing ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                                >
-                                    <option value="">Select mode of payment...</option>
-                                    <option value="Bank Transfer">Bank Transfer</option>
-                                    <option value="Cash">Cash</option>
-                                    <option value="Cheque">Cheque</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
                                     Payment Received By <span className="text-red-500">*</span>
                                 </label>
                                 <select
@@ -805,6 +874,88 @@ const Inspection = () => {
                                     ))}
                                 </select>
                             </div>
+                            {modalInvestorAllocations.length > 0 && (
+                                <div className="border border-gray-200 rounded-lg bg-gray-50">
+                                    <div className="px-3 py-2 text-xs text-gray-600">
+                                        Select a mode of payment for each investor. All rows must be filled before purchasing.
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-gray-200 bg-white">
+                                            <thead className="bg-gray-100">
+                                                <tr>
+                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                                        Investor
+                                                    </th>
+                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                                        Mode of Payment <span className="text-red-500">*</span>
+                                                    </th>
+                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                                        Allocation
+                                                    </th>
+                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                                        Amount (AED)
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-200 text-sm">
+                                                {modalInvestorAllocations.map((allocation, index) => {
+                                                    const details = resolveInvestorDetails(allocation);
+                                                    const investorKey = details.id || `idx-${index}`;
+                                                    const payment = details.id ? (perInvestorPayments[details.id] || { modeOfPayment: '' }) : { modeOfPayment: '' };
+                                                    return (
+                                                        <tr key={investorKey}>
+                                                            <td className="px-4 py-3">
+                                                                <div className="font-semibold text-gray-900">
+                                                                    {details.name || details.email || 'Investor'}
+                                                                </div>
+                                                                {details.email && (
+                                                                    <div className="text-xs text-gray-500">{details.email}</div>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <select
+                                                                    value={payment.modeOfPayment}
+                                                                    onChange={(e) => {
+                                                                        if (!details.id) return;
+                                                                        const value = e.target.value;
+                                                                        setPerInvestorPayments((prev) => {
+                                                                            if (!value) {
+                                                                                const next = { ...prev };
+                                                                                delete next[details.id];
+                                                                                return next;
+                                                                            }
+                                                                            return {
+                                                                                ...prev,
+                                                                                [details.id]: {
+                                                                                    ...(prev[details.id] || {}),
+                                                                                    modeOfPayment: value
+                                                                                }
+                                                                            };
+                                                                        });
+                                                                    }}
+                                                                    disabled={purchasing}
+                                                                    className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                                >
+                                                                    <option value="">Select...</option>
+                                                                    <option value="Bank Transfer">Bank Transfer</option>
+                                                                    <option value="Cash">Cash</option>
+                                                                    <option value="Cheque">Cheque</option>
+                                                                </select>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-xs text-gray-700">
+                                                                {allocation.percentage}%
+                                                            </td>
+                                                            <td className="px-4 py-3 text-xs text-gray-700">
+                                                                AED {Number(allocation.amount || 0).toLocaleString()}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end rounded-b-xl">
                             <button
@@ -819,8 +970,8 @@ const Inspection = () => {
                             </button>
                             <button
                                 onClick={confirmPurchase}
-                                disabled={purchasing || !invoicePaymentDetails.modeOfPayment || !invoicePaymentDetails.paymentReceivedBy}
-                                className={`px-4 py-2 text-sm font-medium rounded-lg ${purchasing || !invoicePaymentDetails.modeOfPayment || !invoicePaymentDetails.paymentReceivedBy
+                                disabled={!canSubmitSinglePurchase}
+                                className={`px-4 py-2 text-sm font-medium rounded-lg ${!canSubmitSinglePurchase
                                     ? 'bg-primary-400 text-white cursor-not-allowed'
                                     : 'bg-primary-600 text-white hover:bg-primary-700'
                                     }`}

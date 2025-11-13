@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
@@ -10,6 +10,8 @@ import InspectionReportIcon from '../../assets/icons/inspection-report.svg';
 import RegistrationCardIcon from '../../assets/icons/registration-card.svg';
 import CarPicturesIcon from '../../assets/icons/car-pictures.svg';
 import OnlineHistoryCheckIcon from '../../assets/icons/online-history-check.svg';
+
+const AUTO_SAVE_DELAY = 600;
 
 const InspectionDetail = () => {
     const { id } = useParams();
@@ -44,13 +46,16 @@ const InspectionDetail = () => {
     const [chassisNumber, setChassisNumber] = useState('');
     const [savingPrice, setSavingPrice] = useState(false);
     const [investors, setInvestors] = useState([]);
-    const [assigningInvestor, setAssigningInvestor] = useState(false);
     const [submittingApproval, setSubmittingApproval] = useState(false);
     const [approving, setApproving] = useState(false);
     const [declining, setDeclining] = useState(false);
     const [purchasing, setPurchasing] = useState(false);
     const [showPurchaseModal, setShowPurchaseModal] = useState(false);
-    const [selectedInvestor, setSelectedInvestor] = useState(null);
+    const [investorAllocations, setInvestorAllocations] = useState([]);
+    const [savingInvestorAllocations, setSavingInvestorAllocations] = useState(false);
+    const [newInvestorId, setNewInvestorId] = useState('');
+    const [newInvestorPercentage, setNewInvestorPercentage] = useState('');
+    const [newInvestorAmount, setNewInvestorAmount] = useState('');
     const [showPOFieldsModal, setShowPOFieldsModal] = useState(false);
     const [savingPOFields, setSavingPOFields] = useState(false);
     const [poFields, setPOFields] = useState({
@@ -59,16 +64,24 @@ const InspectionDetail = () => {
         agent_commision: '',
         car_recovery_cost: '',
         other_charges: '',
-        total_investment: ''
+        total_investment: '',
+        transferCostInvestor: '',
+        detailingInspectionCostInvestor: '',
+        agentCommissionInvestor: '',
+        carRecoveryCostInvestor: '',
+        otherChargesInvestor: ''
     });
+    const [poFieldsError, setPOFieldsError] = useState('');
     const [viewingDocumentId, setViewingDocumentId] = useState(null);
     const [downloadingDocumentId, setDownloadingDocumentId] = useState(null);
     const [showInvoiceModal, setShowInvoiceModal] = useState(false);
     const [invoicePaymentDetails, setInvoicePaymentDetails] = useState({
-        modeOfPayment: '',
         paymentReceivedBy: ''
     });
+    const [perInvestorPayments, setPerInvestorPayments] = useState({});
     const [admins, setAdmins] = useState([]);
+
+    const autoSaveTimeoutRef = useRef(null);
 
     const documentCategories = [
         { key: 'inspectionReport', label: 'Inspection Report', accept: '.pdf', multiple: false, IconComponent: InspectionReportIcon },
@@ -76,11 +89,6 @@ const InspectionDetail = () => {
         { key: 'carPictures', label: 'Car Pictures', accept: '.png,.jpg,.jpeg', multiple: true, IconComponent: CarPicturesIcon },
         { key: 'onlineHistoryCheck', label: 'Online History Check', accept: '.pdf', multiple: false, IconComponent: OnlineHistoryCheckIcon }
     ];
-
-    useEffect(() => {
-        fetchLead();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [id]);
 
     useEffect(() => {
         // Load investors list for admin
@@ -114,22 +122,38 @@ const InspectionDetail = () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // Update selected investor when lead or investors change
     useEffect(() => {
-        if (lead?.investor && investors.length > 0) {
-            const assignedInvestor = investors.find(inv => inv._id === lead.investor);
-            if (assignedInvestor) {
-                setSelectedInvestor(assignedInvestor);
-            }
+        if (!showInvoiceModal) {
+            setPerInvestorPayments({});
         }
-    }, [lead?.investor, investors]);
+    }, [showInvoiceModal]);
 
-    const fetchLead = async () => {
+    useEffect(() => {
+        return () => {
+            if (autoSaveTimeoutRef.current) {
+                clearTimeout(autoSaveTimeoutRef.current);
+            }
+        };
+    }, []);
+
+    // Update selected investor when lead or investors change
+    const fetchLead = useCallback(async () => {
         try {
             const response = await axiosInstance.get(`/purchases/leads/${id}`);
             const leadData = response.data.data;
             setLead(leadData);
             setChassisNumber(leadData?.vehicleInfo?.vin || '');
+            if (Array.isArray(leadData?.investorAllocations) && leadData.investorAllocations.length > 0) {
+                setInvestorAllocations(
+                    leadData.investorAllocations.map((allocation) => ({
+                        investorId: allocation.investorId?._id || allocation.investorId,
+                        percentage: allocation.percentage != null ? allocation.percentage.toString() : '',
+                        amount: allocation.amount != null ? allocation.amount.toString() : ''
+                    }))
+                );
+            } else {
+                setInvestorAllocations([]);
+            }
 
             if (leadData.priceAnalysis) {
                 setPriceAnalysis({
@@ -143,9 +167,18 @@ const InspectionDetail = () => {
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to fetch lead');
         } finally {
+            if (autoSaveTimeoutRef.current) {
+                clearTimeout(autoSaveTimeoutRef.current);
+                autoSaveTimeoutRef.current = null;
+            }
             setLoading(false);
+            setSavingInvestorAllocations(false);
         }
-    };
+    }, [id]);
+
+    useEffect(() => {
+        fetchLead();
+    }, [fetchLead]);
 
     const handleFileSelect = (category, e) => {
         const files = Array.from(e.target.files);
@@ -294,31 +327,32 @@ const InspectionDetail = () => {
         }
     };
 
-    const handleViewSignedDocument = async (doc) => {
-        const docId = doc.documentId || doc._id;
+    const handleViewDocuSignDocument = useCallback(async (doc) => {
+        if (!doc?.documentId) {
+            alert('Document not available');
+            return;
+        }
+        if (!lead?.purchaseOrder?._id) {
+            alert('Purchase order not found');
+            return;
+        }
+        const docId = doc.documentId;
         setViewingDocumentId(docId);
         try {
-            if (!lead?.purchaseOrder?._id) {
-                alert('Purchase order not found');
-                setViewingDocumentId(null);
-                return;
-            }
+            const response = await axiosInstance.get(
+                `/purchases/po/${lead.purchaseOrder._id}/documents/${docId}`,
+                {
+                    responseType: 'arraybuffer',
+                    headers: { Accept: 'application/pdf' }
+                }
+            );
 
-            const response = await axiosInstance.get(`/purchases/po/${lead.purchaseOrder._id}/documents/${doc.documentId}`, {
-                responseType: 'arraybuffer',
-                headers: { Accept: 'application/pdf' }
-            });
-
-            const contentTypeHeader = (response.headers?.['content-type'] || response.headers?.['Content-Type'] || '');
-            const isPdf = contentTypeHeader.includes('application/pdf');
-
-            const blob = new Blob([response.data], { type: isPdf ? 'application/pdf' : 'application/pdf' });
+            const blob = new Blob([response.data], { type: 'application/pdf' });
             const blobUrl = URL.createObjectURL(blob);
 
-            // Try opening a blank tab and embed the PDF via iframe for better reliability
             const newWindow = window.open('', '_blank');
             if (newWindow && !newWindow.closed) {
-                const safeTitle = (doc.name || doc.fileName || 'Document').replace(/[<>&]/g, '');
+                const safeTitle = (doc.name || 'Document').replace(/[<>&]/g, '');
                 const html = `<!doctype html>
 <html>
 <head>
@@ -337,7 +371,6 @@ const InspectionDetail = () => {
                 newWindow.document.write(html);
                 newWindow.document.close();
             } else {
-                // Fallback: open via anchor click without forcing download
                 const link = document.createElement('a');
                 link.href = blobUrl;
                 link.target = '_blank';
@@ -353,7 +386,42 @@ const InspectionDetail = () => {
         } finally {
             setViewingDocumentId(null);
         }
-    };
+    }, [lead?.purchaseOrder?._id]);
+
+    const handleDownloadDocuSignDocument = useCallback(async (doc) => {
+        if (!doc?.documentId) {
+            alert('Document not available');
+            return;
+        }
+        if (!lead?.purchaseOrder?._id) {
+            alert('Purchase order not found');
+            return;
+        }
+        const docId = doc.documentId;
+        setDownloadingDocumentId(docId);
+        try {
+            const response = await axiosInstance.get(
+                `/purchases/po/${lead.purchaseOrder._id}/documents/${docId}`,
+                {
+                    responseType: 'arraybuffer',
+                    headers: { Accept: 'application/pdf' }
+                }
+            );
+            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const blobUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = doc.name || 'document.pdf';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60 * 1000);
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to download signed document');
+        } finally {
+            setDownloadingDocumentId(null);
+        }
+    }, [lead?.purchaseOrder?._id]);
 
     const handleDeleteDocument = (docId, fileName) => {
         setDocumentToDelete({ id: docId, name: fileName });
@@ -498,6 +566,483 @@ const InspectionDetail = () => {
         return Boolean(pa.minSellingPrice && pa.maxSellingPrice && pa.purchasedFinalPrice);
     };
 
+    const getInvestorDetails = useCallback((investorId) => {
+        if (!investorId) return null;
+        const fromList = investors.find(inv => inv._id === investorId);
+        if (fromList) return fromList;
+        const fromLead = lead?.investorAllocations?.find((allocation) => {
+            const id = allocation.investorId?._id || allocation.investorId;
+            return id === investorId;
+        });
+        if (fromLead) {
+            const investorDoc = fromLead.investorId && typeof fromLead.investorId === 'object' && '_id' in fromLead.investorId
+                ? fromLead.investorId
+                : {};
+            const remainingCredit =
+                investorDoc?.creditLimit != null && investorDoc?.utilizedAmount != null
+                    ? investorDoc.creditLimit - investorDoc.utilizedAmount
+                    : undefined;
+            return {
+                _id: investorId,
+                name: investorDoc?.name || fromLead.name || 'Investor',
+                email: investorDoc?.email || fromLead.email,
+                creditLimit: investorDoc?.creditLimit,
+                utilizedAmount: investorDoc?.utilizedAmount,
+                remainingCredit,
+                decidedPercentageMin: investorDoc?.decidedPercentageMin ?? fromLead.decidedPercentageMin,
+                decidedPercentageMax: investorDoc?.decidedPercentageMax ?? fromLead.decidedPercentageMax
+            };
+        }
+        return null;
+    }, [investors, lead]);
+
+    const getInvestorRange = useCallback((investorId) => {
+        const details = getInvestorDetails(investorId);
+        return {
+            min: details?.decidedPercentageMin ?? 0,
+            max: details?.decidedPercentageMax ?? 100
+        };
+    }, [getInvestorDetails]);
+
+    const getInvestorFundingStats = (investorId, requestedAmount) => {
+        const details = getInvestorDetails(investorId);
+        if (!details) return null;
+        const creditLimit = Number(details.creditLimit || 0);
+        const utilized = Number(details.utilizedAmount || 0);
+        const remaining = creditLimit - utilized;
+        const requested = Number(requestedAmount || 0);
+        const remainingAfter = remaining - requested;
+        return {
+            creditLimit,
+            utilized,
+            remaining,
+            requested,
+            remainingAfter,
+            name: details.name
+        };
+    };
+
+    const getInvestorInitials = useCallback((investorId) => {
+        const details = getInvestorDetails(investorId);
+        const source = details?.name || details?.email || 'Investor';
+        return source
+            .split(/[\s@.]+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part) => part[0]?.toUpperCase() ?? '')
+            .join('') || 'IN';
+    }, [getInvestorDetails]);
+
+    const docuSignEnvelopesByInvestor = useMemo(() => {
+        const envelopes = lead?.purchaseOrder?.docuSignEnvelopes || [];
+        return envelopes.reduce((acc, envelope) => {
+            const investorKey = envelope?.investorId?._id || envelope?.investorId;
+            if (investorKey) {
+                acc[investorKey.toString()] = envelope;
+            }
+            return acc;
+        }, {});
+    }, [lead?.purchaseOrder?.docuSignEnvelopes]);
+
+    const chargeInvestorOptions = useMemo(() => {
+        const seen = new Set();
+        return investorAllocations.reduce((acc, allocation) => {
+            const rawId = allocation?.investorId?._id || allocation?.investorId;
+            if (!rawId) {
+                return acc;
+            }
+            const id = rawId.toString();
+            if (seen.has(id)) {
+                return acc;
+            }
+            seen.add(id);
+            const details = getInvestorDetails(id);
+            acc.push({
+                id,
+                label: details?.name || details?.email || 'Investor'
+            });
+            return acc;
+        }, []);
+    }, [investorAllocations, getInvestorDetails]);
+
+    const closePOFieldsModal = () => {
+        setShowPOFieldsModal(false);
+        setPOFieldsError('');
+    };
+
+    const docuSignEnvelopeIdToInvestorMap = useMemo(() => {
+        const envelopes = lead?.purchaseOrder?.docuSignEnvelopes || [];
+        return envelopes.reduce((acc, envelope) => {
+            if (envelope?.envelopeId) {
+                const investorKey = envelope?.investorId?._id || envelope?.investorId;
+                if (investorKey) {
+                    acc[envelope.envelopeId] = investorKey.toString();
+                }
+            }
+            return acc;
+        }, {});
+    }, [lead?.purchaseOrder?.docuSignEnvelopes]);
+
+    const docuSignDocumentsByInvestor = useMemo(() => {
+        const documents = lead?.purchaseOrder?.docuSignDocuments || [];
+        return documents.reduce((acc, document) => {
+            let investorKey = document?.investorId?._id || document?.investorId;
+            if (!investorKey && document?.sourceEnvelopeId) {
+                const mappedInvestor = docuSignEnvelopeIdToInvestorMap[document.sourceEnvelopeId];
+                if (mappedInvestor) {
+                    investorKey = mappedInvestor;
+                }
+            }
+            if (investorKey) {
+                const key = investorKey.toString();
+                if (!acc[key]) {
+                    acc[key] = [];
+                }
+                acc[key].push(document);
+            }
+            return acc;
+        }, {});
+    }, [lead?.purchaseOrder?.docuSignDocuments, docuSignEnvelopeIdToInvestorMap]);
+
+    const getDocuSignEnvelopeForInvestor = useCallback((investorId) => {
+        if (!investorId) return null;
+        const key = investorId?._id ? investorId._id.toString() : investorId.toString();
+        return docuSignEnvelopesByInvestor[key] || null;
+    }, [docuSignEnvelopesByInvestor]);
+
+    const getDocuSignDocumentsForInvestor = useCallback((investorId) => {
+        if (!investorId) return [];
+        const key = investorId?._id ? investorId._id.toString() : investorId.toString();
+        return docuSignDocumentsByInvestor[key] || [];
+    }, [docuSignDocumentsByInvestor]);
+
+    const getDocuSignStatusMeta = useCallback((status) => {
+        if (!status) return null;
+        const normalized = status.toLowerCase();
+        const statusConfig = {
+            completed: {
+                label: 'Signed',
+                tone: 'success',
+                icon: SignedIcon,
+                description: 'Investor has signed the agreement.'
+            },
+            sent: {
+                label: 'Pending Signature',
+                tone: 'warning',
+                icon: PendingIcon,
+                description: 'Awaiting investor signature.'
+            },
+            delivered: {
+                label: 'Viewed',
+                tone: 'info',
+                icon: PendingIcon,
+                description: 'Investor has viewed the agreement.'
+            },
+            created: {
+                label: 'Draft',
+                tone: 'default',
+                description: 'Envelope prepared in DocuSign.'
+            },
+            declined: {
+                label: 'Declined',
+                tone: 'danger',
+                description: 'Investor declined to sign.'
+            },
+            voided: {
+                label: 'Voided',
+                tone: 'danger',
+                description: 'Envelope was voided.'
+            },
+            failed: {
+                label: 'Failed',
+                tone: 'danger',
+                description: 'Sending to investor failed.'
+            }
+        };
+
+        const toneClasses = {
+            success: 'bg-green-100 text-green-800 border-green-200',
+            warning: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+            info: 'bg-blue-100 text-blue-800 border-blue-200',
+            danger: 'bg-red-100 text-red-800 border-red-200',
+            default: 'bg-gray-100 text-gray-700 border-gray-200'
+        };
+
+        const config = statusConfig[normalized] || {
+            label: normalized.charAt(0).toUpperCase() + normalized.slice(1),
+            tone: 'default',
+            description: 'Envelope status updated.'
+        };
+
+        return {
+            ...config,
+            badgeClass: `inline-flex items-center gap-1 px-3 py-1 rounded-full border text-xs font-semibold ${toneClasses[config.tone] || toneClasses.default}`,
+            normalized
+        };
+    }, []);
+
+    const formatDateTime = useCallback((value) => {
+        if (!value) return null;
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return null;
+        return date.toLocaleString();
+    }, []);
+
+    const totalAmount = investorAllocations.reduce((sum, allocation) => {
+        const value = parseFloat(allocation.amount);
+        return sum + (Number.isNaN(value) ? 0 : value);
+    }, 0);
+
+    const purchasePrice = Number(lead?.priceAnalysis?.purchasedFinalPrice || 0);
+    const remainingPurchaseAmount = purchasePrice > 0 ? Math.max(purchasePrice - totalAmount, 0) : null;
+
+    const formatCurrency = (value) => {
+        if (value == null || Number.isNaN(Number(value))) return 'N/A';
+        return Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    };
+
+    const selectedInvestorIds = investorAllocations.map((allocation) => allocation.investorId);
+    const availableInvestors = investors.filter((investor) => !selectedInvestorIds.includes(investor._id));
+
+    const saveInvestorAllocations = useCallback(async (allocations) => {
+        if (!Array.isArray(allocations)) {
+            return;
+        }
+
+        try {
+            setSavingInvestorAllocations(true);
+            setError('');
+
+            if (allocations.length === 0) {
+                await axiosInstance.put(`/purchases/leads/${id}/investor`, {
+                    investorAllocations: []
+                });
+                setLead((prev) => (prev ? { ...prev, investorAllocations: [] } : prev));
+                return;
+            }
+
+            let runningAmount = 0;
+            let runningPercentage = 0;
+
+            const payload = allocations.map((allocation) => {
+                const percentage = parseFloat(allocation.percentage);
+                if (Number.isNaN(percentage) || percentage <= 0) {
+                    throw new Error('Each investor allocation must have a valid percentage greater than 0.');
+                }
+                const { min, max } = getInvestorRange(allocation.investorId);
+                if (percentage < min || percentage > max) {
+                    throw new Error(`Allocation for investor must be between ${min}% and ${max}%`);
+                }
+                const amount = allocation.amount !== '' ? parseFloat(allocation.amount) : (purchasePrice > 0 ? Number(((percentage / 100) * purchasePrice).toFixed(2)) : 0);
+                if (Number.isNaN(amount) || amount <= 0) {
+                    throw new Error('Each investor allocation must have a valid amount greater than 0.');
+                }
+                if (purchasePrice > 0 && amount > purchasePrice) {
+                    throw new Error('Investor amount cannot exceed the purchased final price.');
+                }
+                runningAmount += amount;
+                runningPercentage += percentage;
+                return {
+                    investorId: allocation.investorId,
+                    percentage,
+                    amount
+                };
+            });
+
+            if (runningPercentage > 100.0001) {
+                throw new Error('Total allocation cannot exceed 100%.');
+            }
+
+            if (purchasePrice > 0 && runningAmount > purchasePrice + 0.0001) {
+                throw new Error('Total investor amount cannot exceed the purchased final price.');
+            }
+
+            await axiosInstance.put(`/purchases/leads/${id}/investor`, {
+                investorAllocations: payload
+            });
+            setLead((prev) => {
+                if (!prev) {
+                    return prev;
+                }
+                const previousAllocations = Array.isArray(prev.investorAllocations) ? prev.investorAllocations : [];
+                const merged = payload.map((item) => {
+                    const existing = previousAllocations.find((existingAllocation) => {
+                        const existingId = existingAllocation?.investorId?._id || existingAllocation?.investorId;
+                        return existingId === item.investorId;
+                    });
+                    if (existing && existing.investorId && typeof existing.investorId === 'object') {
+                        return {
+                            ...existing,
+                            percentage: item.percentage,
+                            amount: item.amount
+                        };
+                    }
+                    return { ...item };
+                });
+                return {
+                    ...prev,
+                    investorAllocations: merged
+                };
+            });
+        } catch (err) {
+            setError(err.response?.data?.message || err.message || 'Failed to save investor allocations');
+        } finally {
+            if (autoSaveTimeoutRef.current) {
+                clearTimeout(autoSaveTimeoutRef.current);
+                autoSaveTimeoutRef.current = null;
+            }
+            setSavingInvestorAllocations(false);
+        }
+    }, [getInvestorRange, id, purchasePrice]);
+
+    const scheduleInvestorAllocationSave = useCallback((nextAllocations) => {
+        if (!Array.isArray(nextAllocations)) {
+            return;
+        }
+
+        const hasIncompleteAllocation = nextAllocations.some((allocation) => {
+            const percentageValue = parseFloat(allocation.percentage);
+            const amountValue = parseFloat(allocation.amount);
+            return (
+                allocation.percentage === '' ||
+                Number.isNaN(percentageValue) ||
+                percentageValue <= 0 ||
+                allocation.amount === '' ||
+                Number.isNaN(amountValue) ||
+                amountValue <= 0
+            );
+        });
+
+        if (hasIncompleteAllocation) {
+            if (autoSaveTimeoutRef.current) {
+                clearTimeout(autoSaveTimeoutRef.current);
+                autoSaveTimeoutRef.current = null;
+            }
+            return;
+        }
+
+        if (autoSaveTimeoutRef.current) {
+            clearTimeout(autoSaveTimeoutRef.current);
+        }
+        autoSaveTimeoutRef.current = setTimeout(() => {
+            saveInvestorAllocations(nextAllocations);
+        }, AUTO_SAVE_DELAY);
+    }, [saveInvestorAllocations]);
+
+    const handleAllocationPercentageChange = (index, value) => {
+        setInvestorAllocations((prev) => {
+            const updated = [...prev];
+            updated[index] = {
+                ...updated[index],
+                percentage: value.replace(/[^\d.]/g, '')
+            };
+            scheduleInvestorAllocationSave(updated);
+            return updated;
+        });
+    };
+
+    const handleAllocationAmountChange = (index, value) => {
+        setInvestorAllocations((prev) => {
+            const updated = [...prev];
+            updated[index] = {
+                ...updated[index],
+                amount: value.replace(/[^\d.]/g, '')
+            };
+            scheduleInvestorAllocationSave(updated);
+            return updated;
+        });
+    };
+
+    const handleRemoveInvestor = (investorId) => {
+        setInvestorAllocations((prev) => {
+            const updated = prev.filter((allocation) => allocation.investorId !== investorId);
+            scheduleInvestorAllocationSave(updated);
+            return updated;
+        });
+    };
+
+    const handleAddInvestor = () => {
+        if (!newInvestorId) {
+            setError('Please select an investor to add.');
+            return;
+        }
+        if (investorAllocations.some((allocation) => allocation.investorId === newInvestorId)) {
+            setError('Investor already added.');
+            return;
+        }
+        const range = getInvestorRange(newInvestorId);
+        const percentageValue = newInvestorPercentage !== '' ? parseFloat(newInvestorPercentage) : range.min;
+        const clampedPercentage = Number.isNaN(percentageValue) ? range.min : Math.min(Math.max(percentageValue, range.min), range.max);
+        const defaultAmount = purchasePrice > 0 ? Number(((clampedPercentage / 100) * purchasePrice).toFixed(2)) : 0;
+        let amountValue = newInvestorAmount !== '' ? parseFloat(newInvestorAmount) : defaultAmount;
+        if (Number.isNaN(amountValue)) {
+            amountValue = defaultAmount;
+        }
+        if (amountValue <= 0) {
+            setError('Investor amount must be greater than 0.');
+            return;
+        }
+        if (purchasePrice > 0) {
+            if (amountValue > purchasePrice) {
+                setError('Investor amount cannot exceed the purchased final price.');
+                return;
+            }
+            const newTotalAmount = totalAmount + amountValue;
+            if (newTotalAmount > purchasePrice + 0.0001) {
+                setError('Total investor amount cannot exceed the purchased final price.');
+                return;
+            }
+        }
+        setError('');
+        setInvestorAllocations((prev) => {
+            const updated = [
+                ...prev,
+                {
+                    investorId: newInvestorId,
+                    percentage: clampedPercentage.toString(),
+                    amount: amountValue.toString()
+                }
+            ];
+            scheduleInvestorAllocationSave(updated);
+            return updated;
+        });
+        setNewInvestorId('');
+        setNewInvestorPercentage('');
+        setNewInvestorAmount('');
+    };
+
+    useEffect(() => {
+        if (!newInvestorId) {
+            setNewInvestorPercentage('');
+            setNewInvestorAmount('');
+            return;
+        }
+        const { min } = getInvestorRange(newInvestorId);
+        setNewInvestorPercentage(min.toString());
+        if (purchasePrice > 0) {
+            const defaultAmount = Number(((min / 100) * purchasePrice).toFixed(2));
+            setNewInvestorAmount(defaultAmount.toString());
+        } else {
+            setNewInvestorAmount('');
+        }
+    }, [newInvestorId, getInvestorRange, purchasePrice]);
+
+    useEffect(() => {
+        if (!newInvestorId || purchasePrice <= 0) {
+            return;
+        }
+        const percentage = parseFloat(newInvestorPercentage);
+        if (Number.isNaN(percentage)) {
+            return;
+        }
+        if (newInvestorAmount === '') {
+            const defaultAmount = Number(((percentage / 100) * purchasePrice).toFixed(2));
+            setNewInvestorAmount(defaultAmount.toString());
+        }
+    }, [newInvestorPercentage, newInvestorId, purchasePrice, newInvestorAmount]);
+
+    const newInvestorStats = newInvestorId ? getInvestorFundingStats(newInvestorId, newInvestorAmount || 0) : null;
+
     const canShowInvestorTab = () => {
         const hasInspectionReport = lead?.attachments?.some(d => d.category === 'inspectionReport');
         return areRequiredDocsComplete() && isPriceAnalysisComplete() && hasInspectionReport;
@@ -516,24 +1061,17 @@ const InspectionDetail = () => {
 
     const isLeadConverted = () => lead?.status === 'converted';
 
-    const handleAssignInvestor = async (investorId) => {
-        if (!investorId) {
-            setSelectedInvestor(null);
-            return;
-        }
-        setAssigningInvestor(true);
-        try {
-            await axiosInstance.put(`/purchases/leads/${id}/investor`, { investorId });
-            // Find the selected investor details
-            const investor = investors.find(inv => inv._id === investorId);
-            setSelectedInvestor(investor);
-            await fetchLead();
-        } catch (e) {
-            alert(e?.response?.data?.message || 'Failed to assign investor');
-        } finally {
-            setAssigningInvestor(false);
-        }
-    };
+    const hasInvestors = investorAllocations.length > 0;
+    const allInvestorsHavePayment = hasInvestors && investorAllocations.every((allocation) => {
+        const investorRaw = allocation?.investorId?._id || allocation?.investorId;
+        if (!investorRaw) return false;
+        const investorKey = investorRaw.toString();
+        return Boolean(perInvestorPayments[investorKey]?.modeOfPayment);
+    });
+    const canSubmitPurchase = hasInvestors
+        && Boolean(invoicePaymentDetails.paymentReceivedBy)
+        && allInvestorsHavePayment
+        && !purchasing;
 
     const handleSubmitForApproval = async () => {
         // Check if PO fields need to be filled before submitting for approval
@@ -542,14 +1080,39 @@ const InspectionDetail = () => {
 
         if (user?.role === 'admin' && needPOFields) {
             // Show PO fields modal first
+            const assignedInvestorIds = Array.from(new Set(
+                investorAllocations
+                    .map((allocation) => allocation?.investorId?._id || allocation?.investorId)
+                    .filter(Boolean)
+                    .map((id) => id.toString())
+            ));
+            const singleAssignedInvestorId = assignedInvestorIds.length === 1 ? assignedInvestorIds[0] : '';
+            const resolveInvestorId = (value) => {
+                if (!value) {
+                    return singleAssignedInvestorId || '';
+                }
+                if (typeof value === 'object' && value !== null) {
+                    if ('_id' in value && value._id) {
+                        return value._id.toString();
+                    }
+                }
+                return value.toString();
+            };
+
             setPOFields({
                 transferCost: po?.transferCost ?? '',
                 detailing_inspection_cost: po?.detailing_inspection_cost ?? '',
                 agent_commision: po?.agent_commision ?? '',
                 car_recovery_cost: po?.car_recovery_cost ?? '',
                 other_charges: po?.other_charges ?? '',
-                total_investment: po?.total_investment ?? ''
+                total_investment: po?.total_investment ?? '',
+                transferCostInvestor: resolveInvestorId(po?.transferCostInvestor),
+                detailingInspectionCostInvestor: resolveInvestorId(po?.detailingInspectionCostInvestor),
+                agentCommissionInvestor: resolveInvestorId(po?.agentCommissionInvestor),
+                carRecoveryCostInvestor: resolveInvestorId(po?.carRecoveryCostInvestor),
+                otherChargesInvestor: resolveInvestorId(po?.otherChargesInvestor)
             });
+            setPOFieldsError('');
             setShowPOFieldsModal(true);
             return;
         }
@@ -577,54 +1140,103 @@ const InspectionDetail = () => {
         }
     };
 
-    const submitPOFieldsAndSubmitForApproval = async () => {
-        // Basic validation for required fields
+    const validatePOFields = () => {
         if (!poFields.transferCost || !poFields.detailing_inspection_cost) {
-            alert('Please fill all required fields.');
+            setPOFieldsError('Transfer cost and detailing / inspection cost are required.');
+            return false;
+        }
+
+        if (!chargeInvestorOptions.length) {
+            setPOFieldsError('Assign at least one investor before saving purchase order details.');
+            return false;
+        }
+
+        if (!poFields.transferCostInvestor) {
+            setPOFieldsError('Select an investor responsible for the transfer cost.');
+            return false;
+        }
+
+        if (!poFields.detailingInspectionCostInvestor) {
+            setPOFieldsError('Select an investor responsible for the detailing / inspection cost.');
+            return false;
+        }
+
+        const optionalCharges = [
+            { amountKey: 'agent_commision', investorKey: 'agentCommissionInvestor', label: 'agent commission' },
+            { amountKey: 'car_recovery_cost', investorKey: 'carRecoveryCostInvestor', label: 'car recovery cost' },
+            { amountKey: 'other_charges', investorKey: 'otherChargesInvestor', label: 'other charges' }
+        ];
+
+        for (const charge of optionalCharges) {
+            const value = poFields[charge.amountKey];
+            const hasAmount = value !== '' && Number(value) > 0;
+            if (hasAmount && !poFields[charge.investorKey]) {
+                setPOFieldsError(`Select an investor responsible for the ${charge.label}.`);
+                return false;
+            }
+        }
+
+        setPOFieldsError('');
+        return true;
+    };
+
+    const buildPurchaseOrderPayload = () => ({
+        transferCost: Number(poFields.transferCost),
+        detailing_inspection_cost: Number(poFields.detailing_inspection_cost),
+        agent_commision: poFields.agent_commision !== '' ? Number(poFields.agent_commision) : 0,
+        car_recovery_cost: poFields.car_recovery_cost !== '' ? Number(poFields.car_recovery_cost) : 0,
+        other_charges: poFields.other_charges !== '' ? Number(poFields.other_charges) : 0,
+        transferCostInvestor: poFields.transferCostInvestor || null,
+        detailingInspectionCostInvestor: poFields.detailingInspectionCostInvestor || null,
+        agentCommissionInvestor: poFields.agentCommissionInvestor || null,
+        carRecoveryCostInvestor: poFields.carRecoveryCostInvestor || null,
+        otherChargesInvestor: poFields.otherChargesInvestor || null
+    });
+
+    const submitPOFieldsAndSubmitForApproval = async () => {
+        if (!validatePOFields()) {
             return;
         }
         setSavingPOFields(true);
         try {
-            await axiosInstance.put(`/purchases/leads/${id}/purchase-order`, {
-                transferCost: Number(poFields.transferCost),
-                detailing_inspection_cost: Number(poFields.detailing_inspection_cost),
-                // total_investment is auto-calculated on the server
-                agent_commision: poFields.agent_commision !== '' ? Number(poFields.agent_commision) : undefined,
-                car_recovery_cost: poFields.car_recovery_cost !== '' ? Number(poFields.car_recovery_cost) : undefined,
-                other_charges: poFields.other_charges !== '' ? Number(poFields.other_charges) : undefined
-            });
-            setShowPOFieldsModal(false);
+            await axiosInstance.put(`/purchases/leads/${id}/purchase-order`, buildPurchaseOrderPayload());
+        } catch (e) {
+            setPOFieldsError(e?.response?.data?.message || 'Failed to save purchase order details.');
+            setSavingPOFields(false);
+            return;
+        }
+
+        closePOFieldsModal();
+        try {
             // Now submit for approval
             await axiosInstance.post(`/purchases/leads/${id}/submit-approval`);
             await fetchLead();
         } catch (e) {
-            alert(e?.response?.data?.message || 'Failed to save PO fields and submit for approval');
+            alert(e?.response?.data?.message || 'Failed to submit for approval');
         } finally {
             setSavingPOFields(false);
         }
     };
 
     const submitPOFieldsAndApprove = async () => {
-        // Basic validation for required fields
-        if (!poFields.transferCost || !poFields.detailing_inspection_cost) {
-            alert('Please fill all required fields.');
+        if (!validatePOFields()) {
             return;
         }
         setSavingPOFields(true);
         try {
-            await axiosInstance.put(`/purchases/leads/${id}/purchase-order`, {
-                transferCost: Number(poFields.transferCost),
-                detailing_inspection_cost: Number(poFields.detailing_inspection_cost),
-                // total_investment is auto-calculated on the server
-                agent_commision: poFields.agent_commision !== '' ? Number(poFields.agent_commision) : undefined,
-                car_recovery_cost: poFields.car_recovery_cost !== '' ? Number(poFields.car_recovery_cost) : undefined,
-                other_charges: poFields.other_charges !== '' ? Number(poFields.other_charges) : undefined
-            });
-            setShowPOFieldsModal(false);
+            await axiosInstance.put(`/purchases/leads/${id}/purchase-order`, buildPurchaseOrderPayload());
+        } catch (e) {
+            setPOFieldsError(e?.response?.data?.message || 'Failed to save purchase order details.');
+            setSavingPOFields(false);
+            return;
+        }
+
+        closePOFieldsModal();
+        try {
             await axiosInstance.post(`/purchases/leads/${id}/approve`);
             await fetchLead();
         } catch (e) {
-            alert(e?.response?.data?.message || 'Failed to save PO fields');
+            alert(e?.response?.data?.message || 'Failed to approve');
         } finally {
             setSavingPOFields(false);
         }
@@ -645,35 +1257,50 @@ const InspectionDetail = () => {
     const handlePurchase = () => {
         // Reset payment details and show invoice modal
         setInvoicePaymentDetails({
-            modeOfPayment: '',
             paymentReceivedBy: ''
         });
+        setPerInvestorPayments({});
         setShowInvoiceModal(true);
     };
 
     const confirmPurchase = async () => {
-        if (!invoicePaymentDetails.modeOfPayment) {
-            alert('Please select mode of payment');
-            return;
-        }
         if (!invoicePaymentDetails.paymentReceivedBy) {
             alert('Please select who received the payment');
+            return;
+        }
+
+        const perInvestorPayload = investorAllocations
+            .map((allocation) => {
+                const investorRaw = allocation?.investorId?._id || allocation?.investorId;
+                if (!investorRaw) return null;
+                const investorId = investorRaw.toString();
+                return {
+                    investorId,
+                    modeOfPayment: perInvestorPayments[investorId]?.modeOfPayment || '',
+                    paymentReceivedBy: invoicePaymentDetails.paymentReceivedBy || ''
+                };
+            })
+            .filter(Boolean);
+
+        const missingPayment = perInvestorPayload.find((entry) => !entry.modeOfPayment || !entry.paymentReceivedBy);
+        if (missingPayment) {
+            alert('Please ensure every investor has a mode of payment and payment received by.');
             return;
         }
 
         setPurchasing(true);
         try {
             const response = await axiosInstance.post(`/purchases/leads/${id}/purchase`, {
-                modeOfPayment: invoicePaymentDetails.modeOfPayment,
-                paymentReceivedBy: invoicePaymentDetails.paymentReceivedBy
+                paymentReceivedBy: invoicePaymentDetails.paymentReceivedBy,
+                investorPayments: perInvestorPayload
             });
             if (response.data.success) {
                 await fetchLead();
                 setShowInvoiceModal(false);
                 setInvoicePaymentDetails({
-                    modeOfPayment: '',
                     paymentReceivedBy: ''
                 });
+                setPerInvestorPayments({});
                 alert('Lead converted to vehicle successfully and invoice sent to investor');
             }
         } catch (error) {
@@ -1392,189 +2019,321 @@ const InspectionDetail = () => {
                                     </div>
 
                                     {user?.role === 'admin' && (
-                                        <div className="bg-white rounded-lg border border-gray-200 p-4">
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Select Investor</label>
-                                            <div className="flex gap-3">
-                                                <select
-                                                    value={lead?.investor || ''}
-                                                    onChange={(e) => handleAssignInvestor(e.target.value)}
-                                                    disabled={assigningInvestor || isSubmittedForApproval()}
-                                                    className="flex-1 border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-primary-500 focus:border-primary-500"
-                                                >
-                                                    <option value="">Choose investor...</option>
-                                                    {investors.map(inv => (
-                                                        <option key={inv._id} value={inv._id}>{inv.name} ({inv.email})</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            {lead?.investor && selectedInvestor && (
-                                                <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                                    <div className="text-sm font-semibold text-blue-900 mb-2">Investor Details</div>
-                                                    <div className="grid grid-cols-2 gap-3 text-xs">
-                                                        <div>
-                                                            <span className="text-blue-700 font-medium">Credit Limit:</span>
-                                                            <div className="text-blue-900 font-semibold">AED {selectedInvestor.creditLimit?.toLocaleString() || 'N/A'}</div>
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-blue-700 font-medium">Utilized:</span>
-                                                            <div className="text-blue-900 font-semibold">AED {selectedInvestor.utilizedAmount?.toLocaleString() || '0'}</div>
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-blue-700 font-medium">Remaining:</span>
-                                                            <div className="text-green-700 font-semibold">AED {selectedInvestor.remainingCredit?.toLocaleString() || 'N/A'}</div>
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-blue-700 font-medium">Purchase Price:</span>
-                                                            <div className="text-purple-700 font-semibold">AED {lead?.priceAnalysis?.purchasedFinalPrice?.toLocaleString() || 'N/A'}</div>
-                                                        </div>
-                                                    </div>
-                                                    {selectedInvestor.remainingCredit && lead?.priceAnalysis?.purchasedFinalPrice && (
-                                                        <div className="mt-2 pt-2 border-t border-blue-200">
-                                                            <div className="flex items-center justify-between text-xs">
-                                                                <span className="text-blue-700">Sufficient Credit:</span>
-                                                                <span className={`font-semibold ${selectedInvestor.remainingCredit >= lead.priceAnalysis.purchasedFinalPrice ? 'text-green-700' : 'text-red-700'}`}>
-                                                                    {selectedInvestor.remainingCredit >= lead.priceAnalysis.purchasedFinalPrice ? '✓ Yes' : '✗ No'}
-                                                                </span>
-                                                            </div>
-                                                        </div>
+                                        <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
+                                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                                <div className="flex flex-col gap-1">
+                                                    <label className="text-sm font-medium text-gray-700">Investor Allocations</label>
+                                                    <span className="text-xs text-gray-500">
+                                                        {savingInvestorAllocations ? (
+                                                            <span className="inline-flex items-center gap-1 text-primary-600">
+                                                                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                </svg>
+                                                                Saving changes...
+                                                            </span>
+                                                        ) : (
+                                                            'Changes save automatically'
+                                                        )}
+                                                    </span>
+                                                </div>
+                                                <div className="text-sm md:text-right">
+                                                    {purchasePrice > 0 && (
+                                                        <div className="text-xs text-gray-500">Purchased Final Price: <span className='text-sm text-green-500'>AED {formatCurrency(purchasePrice)}</span></div>
                                                     )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    {/* DocuSign Status Section */}
-                                    {isDualApproved() && (
-                                        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-10 h-10 rounded-lg bg-blue-200 flex items-center justify-center">
-                                                    <svg className="w-5 h-5 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                    </svg>
-                                                </div>
-                                                <div>
-                                                    <div className="text-sm font-semibold text-blue-900">DocuSign Status</div>
-                                                    <div className="text-xs text-blue-700">Purchase Agreement for Investor</div>
+                                                    <div className="font-semibold text-gray-700">Total Allocated Amount: AED {formatCurrency(totalAmount)}</div>
+                                                    {purchasePrice > 0 && (
+                                                        <div className="text-gray-600">Remaining Amount Needed: AED {formatCurrency(remainingPurchaseAmount)}</div>
+                                                    )}
                                                 </div>
                                             </div>
 
-                                            {!isDocuSignSent() && (
-                                                <div className="bg-white border border-blue-200 rounded-lg p-4 mb-3">
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                                        <div className="text-sm font-semibold text-blue-900">Purchase Agreement</div>
-                                                    </div>
-                                                    <div className="text-xs text-gray-600">
-                                                        Will be sent to investor after dual approval
-                                                    </div>
+                                            {investorAllocations.length === 0 ? (
+                                                <div className="text-sm text-gray-500 border border-dashed border-gray-200 rounded-lg px-3 py-4 text-center">
+                                                    No investors assigned yet. Add investors below to fund this purchase.
                                                 </div>
-                                            )}
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    {investorAllocations.map((allocation, index) => {
+                                                        const details = getInvestorDetails(allocation.investorId);
+                                                        const { min, max } = getInvestorRange(allocation.investorId);
+                                                        const fundingStats = getInvestorFundingStats(allocation.investorId, allocation.amount);
+                                                        const envelope = getDocuSignEnvelopeForInvestor(allocation.investorId);
+                                                        const docuSignStatusMeta = getDocuSignStatusMeta(envelope?.status);
+                                                        const sentAtText = envelope?.sentAt ? `Sent ${formatDateTime(envelope.sentAt)}` : null;
+                                                        const completedAtText = docuSignStatusMeta?.normalized === 'completed'
+                                                            ? formatDateTime(envelope?.completedAt || lead?.purchaseOrder?.docuSignSignedAt)
+                                                            : null;
+                                                        const docuSignDocs = getDocuSignDocumentsForInvestor(allocation.investorId);
 
-                                            {isDocuSignSent() && !isDocuSignFailed() && (
-                                                <div className="bg-white border border-blue-200 rounded-lg p-4 mb-3">
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <div className="text-sm font-semibold text-blue-900">Purchase Agreement</div>
-                                                        <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${lead.purchaseOrder?.docuSignStatus === 'completed'
-                                                            ? 'bg-green-100 text-green-800'
-                                                            : 'bg-yellow-100 text-yellow-800'
-                                                            }`}>
-                                                            {lead.purchaseOrder?.docuSignStatus === 'completed' ? (
-                                                                <>
-                                                                    <img src={SignedIcon} alt="Signed" className="w-3 h-3" />
-                                                                    Signed
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <img src={PendingIcon} alt="Pending" className="w-3 h-3" />
-                                                                    Pending
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                    {lead.purchaseOrder?.docuSignSignedAt && (
-                                                        <div className="text-xs text-gray-600">
-                                                            Signed on {new Date(lead.purchaseOrder.docuSignSignedAt).toLocaleDateString()}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {isDocuSignFailed() && (
-                                                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
-                                                    <div className="text-sm text-red-900 mb-2">
-                                                        {lead?.purchaseOrder?.docuSignStatus === 'voided' ? '❌ DocuSign Voided' : '❌ DocuSign Failed'}
-                                                    </div>
-                                                    <div className="text-xs text-red-700 mb-2">
-                                                        {lead?.purchaseOrder?.docuSignStatus === 'voided'
-                                                            ? 'Purchase agreement has been voided/deleted in DocuSign. The approval process has been reset.'
-                                                            : 'Failed to send agreement to investor. Please check DocuSign configuration.'
-                                                        }
-                                                    </div>
-                                                    {lead.purchaseOrder?.docuSignError && (
-                                                        <div className="text-xs text-red-600 bg-red-100 p-2 rounded">
-                                                            Error: {lead.purchaseOrder.docuSignError}
-                                                        </div>
-                                                    )}
-                                                    {lead.purchaseOrder?.docuSignFailedAt && (
-                                                        <div className="text-xs text-red-600 mt-2">
-                                                            Failed: {new Date(lead.purchaseOrder.docuSignFailedAt).toLocaleString()}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-
-
-                                            {isLeadConverted() && (
-                                                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                                                    <div className="text-sm text-green-900 mb-1">✅ Vehicle Created</div>
-                                                    <div className="text-xs text-green-700">
-                                                        This lead has been converted to a vehicle and added to inventory.
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Signed Documents Section */}
-                                            {isDocuSignCompleted() && lead?.purchaseOrder?.docuSignDocuments && lead.purchaseOrder.docuSignDocuments.length > 0 && (
-                                                <div className="bg-white border border-blue-200 rounded-lg p-4 mt-3">
-                                                    <div className="text-sm font-semibold text-blue-900 mb-3">Signed Documents</div>
-                                                    <div className="space-y-2">
-                                                        {lead.purchaseOrder.docuSignDocuments.map((doc, index) => (
-                                                            <div key={doc.documentId || index} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                                                                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2 2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                                        </svg>
-                                                                    </div>
-                                                                    <div>
-                                                                        <div className="text-sm font-medium text-gray-900">{doc.name}</div>
-                                                                        <div className="text-xs text-gray-500">
-                                                                            {doc.fileSize ? `${(doc.fileSize / 1024).toFixed(1)} KB` : 'PDF Document'}
+                                                        return (
+                                                            <div
+                                                                key={allocation.investorId}
+                                                                className="border border-gray-200 rounded-2xl bg-white px-5 py-6 shadow-sm"
+                                                            >
+                                                                <div className="flex flex-col gap-5">
+                                                                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                                                        <div className="flex items-center gap-4">
+                                                                            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-lg font-semibold text-blue-700">
+                                                                                {getInvestorInitials(allocation.investorId)}
+                                                                            </div>
+                                                                            <div className="space-y-1">
+                                                                                <div className="text-base font-semibold text-gray-900">{details?.name || 'Investor'}</div>
+                                                                                {details?.email && (
+                                                                                    <div className="text-xs text-gray-500">{details.email}</div>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex flex-col items-start gap-2 lg:items-end">
+                                                                            <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-xs font-semibold text-blue-700">
+                                                                                <span className="uppercase tracking-wide text-[11px] text-blue-500">Allowed Range</span>
+                                                                                <span className="text-sm font-semibold text-blue-900">{min}% – {max}%</span>
+                                                                            </div>
+                                                                            <div className="text-right">
+                                                                                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                                                                    DocuSign
+                                                                                </div>
+                                                                                {docuSignStatusMeta ? (
+                                                                                    <div className="flex flex-col items-start gap-1 lg:items-end">
+                                                                                        <span className={docuSignStatusMeta.badgeClass}>
+                                                                                            {docuSignStatusMeta.icon && (
+                                                                                                <img src={docuSignStatusMeta.icon} alt={docuSignStatusMeta.label} className="h-3.5 w-3.5" />
+                                                                                            )}
+                                                                                            {docuSignStatusMeta.label}
+                                                                                        </span>
+                                                                                        <div className="text-[11px] text-gray-500 leading-snug max-w-[200px]">
+                                                                                            {docuSignStatusMeta.description}
+                                                                                            {completedAtText && (
+                                                                                                <span className="block text-[11px] text-gray-400">
+                                                                                                    Signed {completedAtText}
+                                                                                                </span>
+                                                                                            )}
+                                                                                            {!completedAtText && sentAtText && (
+                                                                                                <span className="block text-[11px] text-gray-400">
+                                                                                                    {sentAtText}
+                                                                                                </span>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <div className="text-[11px] text-gray-400 font-medium">
+                                                                                        Not sent yet
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
                                                                         </div>
                                                                     </div>
-                                                                </div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <button
-                                                                        onClick={() => handleViewSignedDocument(doc)}
-                                                                        disabled={viewingDocumentId === (doc.documentId || doc._id)}
-                                                                        className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                    >
-                                                                        {viewingDocumentId === (doc.documentId || doc._id) ? (
-                                                                            <span className="flex items-center gap-1">
-                                                                                <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
-                                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                                                </svg>
-                                                                                Loading...
-                                                                            </span>
-                                                                        ) : (
-                                                                            'View'
+
+                                                                    {docuSignDocs.length > 0 && (
+                                                                        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-900">
+                                                                            <div className="mb-2 flex items-center justify-between">
+                                                                                <span className="font-semibold text-blue-900">Signed Documents</span>
+                                                                                <span className="text-[11px] text-blue-600">{docuSignDocs.length}</span>
+                                                                            </div>
+                                                                            <div className="space-y-2">
+                                                                                {docuSignDocs.map((doc, docIndex) => {
+                                                                                    const docKey = doc.documentId || doc._id || `${allocation.investorId}-${docIndex}`;
+                                                                                    const isViewing = viewingDocumentId === doc.documentId;
+                                                                                    const isDownloading = downloadingDocumentId === doc.documentId;
+                                                                                    return (
+                                                                                        <div key={docKey} className="flex items-center justify-between rounded-lg bg-white px-3 py-2">
+                                                                                            <div className="mr-3 min-w-0">
+                                                                                                <div className="truncate text-sm font-semibold text-gray-900">{doc.name || 'Document'}</div>
+                                                                                                <div className="text-[11px] text-gray-500">
+                                                                                                    {doc.fileSize ? formatFileSize(doc.fileSize) : 'PDF Document'}
+                                                                                                </div>
+                                                                                            </div>
+                                                                                            <div className="flex items-center gap-2">
+                                                                                                <button
+                                                                                                    onClick={() => handleViewDocuSignDocument(doc)}
+                                                                                                    disabled={isViewing || isDownloading}
+                                                                                                    className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                                >
+                                                                                                    {isViewing ? (
+                                                                                                        <span className="flex items-center gap-1">
+                                                                                                            <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                                                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                                            </svg>
+                                                                                                            Viewing...
+                                                                                                        </span>
+                                                                                                    ) : (
+                                                                                                        'View'
+                                                                                                    )}
+                                                                                                </button>
+                                                                                                <button
+                                                                                                    onClick={() => handleDownloadDocuSignDocument(doc)}
+                                                                                                    disabled={isDownloading}
+                                                                                                    className="px-3 py-1.5 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                                >
+                                                                                                    {isDownloading ? (
+                                                                                                        <span className="flex items-center gap-1">
+                                                                                                            <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                                                                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                                            </svg>
+                                                                                                            Downloading...
+                                                                                                        </span>
+                                                                                                    ) : (
+                                                                                                        'Download'
+                                                                                                    )}
+                                                                                                </button>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    );
+                                                                                })}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {fundingStats && (
+                                                                        <div className="grid gap-3 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                                                                            {[
+                                                                                { label: 'Credit Limit', value: fundingStats.creditLimit, tone: 'default' },
+                                                                                { label: 'Utilized', value: fundingStats.utilized, tone: 'default' },
+                                                                                { label: 'Available Before Allocation', value: fundingStats.remaining, tone: 'default' },
+                                                                                { label: 'Available After Allocation', value: fundingStats.remainingAfter, tone: fundingStats.remainingAfter < 0 ? 'negative' : 'positive' }
+                                                                            ].map((item, tileIndex) => (
+                                                                                <div
+                                                                                    key={`${allocation.investorId}-${tileIndex}`}
+                                                                                    className={`flex flex-col rounded-xl border px-4 py-3 ${item.tone === 'positive'
+                                                                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                                                                        : item.tone === 'negative'
+                                                                                            ? 'border-red-200 bg-red-50 text-red-700'
+                                                                                            : 'border-gray-200 bg-gray-50 text-gray-900'
+                                                                                        }`}
+                                                                                >
+                                                                                    <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{item.label}</div>
+                                                                                    <div className="text-sm font-semibold">AED {formatCurrency(item.value)}</div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+
+                                                                    <hr className="border-gray-100" />
+
+                                                                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                                                                        <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+                                                                            <div className="w-full sm:w-40">
+                                                                                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Percentage</label>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <input
+                                                                                        type="number"
+                                                                                        min={min}
+                                                                                        max={max}
+                                                                                        step="0.1"
+                                                                                        value={allocation.percentage}
+                                                                                        onChange={(e) => handleAllocationPercentageChange(index, e.target.value)}
+                                                                                        onWheel={(e) => e.target.blur()}
+                                                                                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                                                        disabled={isSubmittedForApproval()}
+                                                                                    />
+                                                                                    <span className="text-sm font-medium text-gray-600">%</span>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="w-full sm:w-48">
+                                                                                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Amount (AED)</label>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <input
+                                                                                        type="number"
+                                                                                        min="0"
+                                                                                        step="0.01"
+                                                                                        value={allocation.amount || ''}
+                                                                                        onChange={(e) => handleAllocationAmountChange(index, e.target.value)}
+                                                                                        onWheel={(e) => e.target.blur()}
+                                                                                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                                                        placeholder="0.00"
+                                                                                        disabled={isSubmittedForApproval()}
+                                                                                    />
+                                                                                    <span className="text-sm font-medium text-gray-600">AED</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                        {!isSubmittedForApproval() && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleRemoveInvestor(allocation.investorId)}
+                                                                                className="self-start rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:text-red-700"
+                                                                            >
+                                                                                Remove
+                                                                            </button>
                                                                         )}
-                                                                    </button>
+                                                                    </div>
                                                                 </div>
                                                             </div>
-                                                        ))}
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
+                                            {!isSubmittedForApproval() && (
+                                                <div className="border-t border-gray-100 pt-4 space-y-4">
+                                                    <div className="flex flex-col lg:flex-row lg:items-end lg:gap-3">
+                                                        <div className="flex-1">
+                                                            <label className="block text-sm font-medium text-gray-700 mb-2">Add Investor</label>
+                                                            <select
+                                                                value={newInvestorId}
+                                                                onChange={(e) => setNewInvestorId(e.target.value)}
+                                                                className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-primary-500 focus:border-primary-500"
+                                                            >
+                                                                <option value="">Select investor...</option>
+                                                                {availableInvestors.map((inv) => (
+                                                                    <option key={inv._id} value={inv._id}>
+                                                                        {inv.name} ({inv.email})
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div className="flex items-end gap-2 mt-3 lg:mt-0">
+                                                            <div>
+                                                                <label className="block text-sm font-medium text-gray-700 mb-2">Percentage</label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={newInvestorPercentage}
+                                                                    onChange={(e) => setNewInvestorPercentage(e.target.value.replace(/[^\d.]/g, ''))}
+                                                                    onWheel={(e) => e.target.blur()}
+                                                                    min={newInvestorId ? getInvestorRange(newInvestorId).min : 0}
+                                                                    max={newInvestorId ? getInvestorRange(newInvestorId).max : 100}
+                                                                    step="0.1"
+                                                                    className="w-28 border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                                    placeholder="0"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-sm font-medium text-gray-700 mb-2">Amount (AED)</label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={newInvestorAmount}
+                                                                    onChange={(e) => setNewInvestorAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                                                                    onWheel={(e) => e.target.blur()}
+                                                                    min="0"
+                                                                    step="0.01"
+                                                                    className="w-32 border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                                    placeholder="0.00"
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={handleAddInvestor}
+                                                                disabled={savingInvestorAllocations}
+                                                                className={`inline-flex items-center px-4 py-2 rounded-lg text-white text-sm font-semibold transition-colors ${savingInvestorAllocations ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'}`}
+                                                            >
+                                                                Add
+                                                            </button>
+                                                        </div>
                                                     </div>
+
+                                                    {newInvestorStats && (
+                                                        <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-3 text-xs text-blue-900 space-y-1">
+                                                            <div className="font-semibold text-blue-800">{newInvestorStats.name}</div>
+                                                            <div>Credit Limit: AED {formatCurrency(newInvestorStats.creditLimit)}</div>
+                                                            <div>Utilized: AED {formatCurrency(newInvestorStats.utilized)}</div>
+                                                            <div>Available Before Allocation: AED {formatCurrency(newInvestorStats.remaining)}</div>
+                                                            <div className={newInvestorStats.remainingAfter < 0 ? 'text-red-600 font-semibold' : ''}>
+                                                                Available After Allocation: AED {formatCurrency(newInvestorStats.remainingAfter)}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -1586,7 +2345,7 @@ const InspectionDetail = () => {
                                                 {isSubmittedForApproval() ? 'This lead has been submitted for approval.' : 'Ready to submit for approval.'}
                                             </div>
                                             <div className="flex gap-3">
-                                                {user?.role === 'admin' && !isSubmittedForApproval() && lead?.investor && (
+                                                {user?.role === 'admin' && !isSubmittedForApproval() && investorAllocations.length > 0 && (
                                                     <button
                                                         onClick={handleSubmitForApproval}
                                                         disabled={submittingApproval}
@@ -1952,7 +2711,7 @@ const InspectionDetail = () => {
             {/* Modals */}
             {showDeleteModal && (
                 <div className="fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={cancelDeleteNote}>
-                    <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                    <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-4xl" onClick={(e) => e.stopPropagation()}>
                         <div className="px-6 py-5 border-b border-gray-200">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-semibold text-gray-900">Delete Note</h3>
@@ -2014,13 +2773,13 @@ const InspectionDetail = () => {
             />
 
             {showPOFieldsModal && (
-                <div className="fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => !savingPOFields && setShowPOFieldsModal(false)}>
+                <div className="fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => !savingPOFields && closePOFieldsModal()}>
                     <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl" onClick={(e) => e.stopPropagation()}>
                         <div className="px-6 py-5 border-b border-gray-200">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-semibold text-gray-900">Purchase Order Details</h3>
                                 {!savingPOFields && (
-                                    <button onClick={() => setShowPOFieldsModal(false)} className="text-gray-400 hover:text-gray-600">
+                                    <button onClick={closePOFieldsModal} className="text-gray-400 hover:text-gray-600">
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                         </svg>
@@ -2029,35 +2788,192 @@ const InspectionDetail = () => {
                             </div>
                             <p className="mt-1 text-sm text-gray-500">Provide the required details before final approval.</p>
                         </div>
-                        <div className="px-6 py-5 space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Transfer Cost (RTA) <span className="text-red-500">*</span></label>
-                                    <input type="number" min="0" onWheel={(e) => e.target.blur()} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={poFields.transferCost} onChange={(e) => setPOFields({ ...poFields, transferCost: e.target.value })} />
+                        <div className="px-6 py-5 space-y-5">
+                            {poFieldsError && (
+                                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                                    {poFieldsError}
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Detailing / Inspection Cost <span className="text-red-500">*</span></label>
-                                    <input type="number" min="0" onWheel={(e) => e.target.blur()} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={poFields.detailing_inspection_cost} onChange={(e) => setPOFields({ ...poFields, detailing_inspection_cost: e.target.value })} />
+                            )}
+                            {!chargeInvestorOptions.length && (
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                                    Assign at least one investor before saving purchase order details.
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Agent Commission (Optional)</label>
-                                    <input type="number" min="0" onWheel={(e) => e.target.blur()} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={poFields.agent_commision} onChange={(e) => setPOFields({ ...poFields, agent_commision: e.target.value })} />
+                            )}
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Transfer Cost (RTA) <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            onWheel={(e) => e.target.blur()}
+                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                            value={poFields.transferCost}
+                                            onChange={(e) => setPOFields({ ...poFields, transferCost: e.target.value })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">
+                                            Charge Investor <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            value={poFields.transferCostInvestor}
+                                            onChange={(e) => setPOFields({ ...poFields, transferCostInvestor: e.target.value })}
+                                            disabled={savingPOFields || chargeInvestorOptions.length === 0}
+                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-500"
+                                        >
+                                            <option value="">Select investor...</option>
+                                            {chargeInvestorOptions.map((option) => (
+                                                <option key={option.id} value={option.id}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className="mt-1 text-[11px] text-gray-500">Only the selected investor will see this charge in their PO & invoice.</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Car Recovery Cost (Optional)</label>
-                                    <input type="number" min="0" onWheel={(e) => e.target.blur()} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={poFields.car_recovery_cost} onChange={(e) => setPOFields({ ...poFields, car_recovery_cost: e.target.value })} />
+
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Detailing / Inspection Cost <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            onWheel={(e) => e.target.blur()}
+                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                            value={poFields.detailing_inspection_cost}
+                                            onChange={(e) => setPOFields({ ...poFields, detailing_inspection_cost: e.target.value })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">
+                                            Charge Investor <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            value={poFields.detailingInspectionCostInvestor}
+                                            onChange={(e) => setPOFields({ ...poFields, detailingInspectionCostInvestor: e.target.value })}
+                                            disabled={savingPOFields || chargeInvestorOptions.length === 0}
+                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-500"
+                                        >
+                                            <option value="">Select investor...</option>
+                                            {chargeInvestorOptions.map((option) => (
+                                                <option key={option.id} value={option.id}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className="mt-1 text-[11px] text-gray-500">Investor selection determines who bears this inspection cost.</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Other Charges (Optional)</label>
-                                    <input type="number" min="0" onWheel={(e) => e.target.blur()} className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={poFields.other_charges} onChange={(e) => setPOFields({ ...poFields, other_charges: e.target.value })} />
+
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Agent Commission (Optional)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            onWheel={(e) => e.target.blur()}
+                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                            value={poFields.agent_commision}
+                                            onChange={(e) => setPOFields({ ...poFields, agent_commision: e.target.value })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Charge Investor</label>
+                                        <select
+                                            value={poFields.agentCommissionInvestor}
+                                            onChange={(e) => setPOFields({ ...poFields, agentCommissionInvestor: e.target.value })}
+                                            disabled={savingPOFields || chargeInvestorOptions.length === 0}
+                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-500"
+                                        >
+                                            <option value="">Select investor...</option>
+                                            {chargeInvestorOptions.map((option) => (
+                                                <option key={option.id} value={option.id}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className="mt-1 text-[11px] text-gray-500">Required only when a commission amount is added.</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Car Recovery Cost (Optional)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            onWheel={(e) => e.target.blur()}
+                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                            value={poFields.car_recovery_cost}
+                                            onChange={(e) => setPOFields({ ...poFields, car_recovery_cost: e.target.value })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Charge Investor</label>
+                                        <select
+                                            value={poFields.carRecoveryCostInvestor}
+                                            onChange={(e) => setPOFields({ ...poFields, carRecoveryCostInvestor: e.target.value })}
+                                            disabled={savingPOFields || chargeInvestorOptions.length === 0}
+                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-500"
+                                        >
+                                            <option value="">Select investor...</option>
+                                            {chargeInvestorOptions.map((option) => (
+                                                <option key={option.id} value={option.id}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Other Charges (Optional)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            onWheel={(e) => e.target.blur()}
+                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                            value={poFields.other_charges}
+                                            onChange={(e) => setPOFields({ ...poFields, other_charges: e.target.value })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Charge Investor</label>
+                                        <select
+                                            value={poFields.otherChargesInvestor}
+                                            onChange={(e) => setPOFields({ ...poFields, otherChargesInvestor: e.target.value })}
+                                            disabled={savingPOFields || chargeInvestorOptions.length === 0}
+                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-500"
+                                        >
+                                            <option value="">Select investor...</option>
+                                            {chargeInvestorOptions.map((option) => (
+                                                <option key={option.id} value={option.id}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 </div>
                                 {/* Total Investment is auto-calculated on the server */}
                                 {/* Prepared By is auto-detected from the current admin on the server */}
                             </div>
                         </div>
                         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end rounded-b-xl">
-                            <button onClick={() => setShowPOFieldsModal(false)} disabled={savingPOFields} className={`px-4 py-2 text-sm font-medium rounded-lg ${savingPOFields ? 'bg-white text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}>Cancel</button>
-                            <button onClick={isSubmittedForApproval() ? submitPOFieldsAndApprove : submitPOFieldsAndSubmitForApproval} disabled={savingPOFields} className={`px-4 py-2 text-sm font-medium rounded-lg ${savingPOFields ? 'bg-primary-400 text-white cursor-not-allowed' : 'bg-primary-600 text-white hover:bg-primary-700'}`}>{savingPOFields ? 'Saving...' : isSubmittedForApproval() ? 'Save & Approve' : 'Save & Submit for Approval'}</button>
+                            <button onClick={closePOFieldsModal} disabled={savingPOFields} className={`px-4 py-2 text-sm font-medium rounded-lg ${savingPOFields ? 'bg-white text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}>Cancel</button>
+                            <button
+                                onClick={isSubmittedForApproval() ? submitPOFieldsAndApprove : submitPOFieldsAndSubmitForApproval}
+                                disabled={savingPOFields || chargeInvestorOptions.length === 0}
+                                className={`px-4 py-2 text-sm font-medium rounded-lg ${savingPOFields || chargeInvestorOptions.length === 0 ? 'bg-primary-400 text-white cursor-not-allowed' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
+                            >
+                                {savingPOFields ? 'Saving...' : isSubmittedForApproval() ? 'Save & Approve' : 'Save & Submit for Approval'}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -2070,7 +2986,7 @@ const InspectionDetail = () => {
                     onClick={() => !purchasing && setShowInvoiceModal(false)}
                 >
                     <div
-                        className="relative bg-white rounded-xl shadow-2xl w-full max-w-md"
+                        className="relative bg-white rounded-xl shadow-2xl w-full max-w-5xl"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="px-6 py-5 border-b border-gray-200">
@@ -2092,22 +3008,6 @@ const InspectionDetail = () => {
                         <div className="px-6 py-5 space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Mode of Payment <span className="text-red-500">*</span>
-                                </label>
-                                <select
-                                    value={invoicePaymentDetails.modeOfPayment}
-                                    onChange={(e) => setInvoicePaymentDetails({ ...invoicePaymentDetails, modeOfPayment: e.target.value })}
-                                    disabled={purchasing}
-                                    className={`w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${purchasing ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                                >
-                                    <option value="">Select mode of payment...</option>
-                                    <option value="Bank Transfer">Bank Transfer</option>
-                                    <option value="Cash">Cash</option>
-                                    <option value="Cheque">Cheque</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
                                     Payment Received By <span className="text-red-500">*</span>
                                 </label>
                                 <select
@@ -2124,6 +3024,89 @@ const InspectionDetail = () => {
                                     ))}
                                 </select>
                             </div>
+                            {investorAllocations.length > 0 && (
+                                <div className="border border-gray-200 rounded-lg bg-gray-50">
+                                    <div className="px-3 py-2 text-xs text-gray-600">
+                                        Select a mode of payment for each investor. All entries are required before issuing invoices.
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-gray-200 bg-white">
+                                            <thead className="bg-gray-100">
+                                                <tr>
+                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                                        Investor
+                                                    </th>
+                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                                        Mode of Payment <span className="text-red-500">*</span>
+                                                    </th>
+                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                                        Allocation
+                                                    </th>
+                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                                        Amount (AED)
+                                                    </th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-200 text-sm">
+                                                {investorAllocations.map((allocation, index) => {
+                                                    const investorRaw = allocation?.investorId?._id || allocation?.investorId;
+                                                    const investorKey = investorRaw ? investorRaw.toString() : `idx-${index}`;
+                                                    const details = getInvestorDetails(investorKey);
+                                                    const payment = perInvestorPayments[investorKey] || { modeOfPayment: '' };
+                                                    return (
+                                                        <tr key={investorKey}>
+                                                            <td className="px-4 py-3">
+                                                                <div className="font-semibold text-gray-900">
+                                                                    {details?.name || details?.email || 'Investor'}
+                                                                </div>
+                                                                {details?.email && (
+                                                                    <div className="text-xs text-gray-500">{details.email}</div>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <select
+                                                                    value={payment.modeOfPayment}
+                                                                    onChange={(e) => {
+                                                                        const value = e.target.value;
+                                                                        if (!investorRaw) return;
+                                                                        setPerInvestorPayments((prev) => {
+                                                                            if (!value) {
+                                                                                const next = { ...prev };
+                                                                                delete next[investorKey];
+                                                                                return next;
+                                                                            }
+                                                                            return {
+                                                                                ...prev,
+                                                                                [investorKey]: {
+                                                                                    ...(prev[investorKey] || {}),
+                                                                                    modeOfPayment: value
+                                                                                }
+                                                                            };
+                                                                        });
+                                                                    }}
+                                                                    disabled={purchasing}
+                                                                    className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                                >
+                                                                    <option value="">Select...</option>
+                                                                    <option value="Bank Transfer">Bank Transfer</option>
+                                                                    <option value="Cash">Cash</option>
+                                                                    <option value="Cheque">Cheque</option>
+                                                                </select>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-xs text-gray-700">
+                                                                {allocation.percentage}%
+                                                            </td>
+                                                            <td className="px-4 py-3 text-xs text-gray-700">
+                                                                AED {formatCurrency(allocation.amount)}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end rounded-b-xl">
                             <button
@@ -2138,8 +3121,8 @@ const InspectionDetail = () => {
                             </button>
                             <button
                                 onClick={confirmPurchase}
-                                disabled={purchasing || !invoicePaymentDetails.modeOfPayment || !invoicePaymentDetails.paymentReceivedBy}
-                                className={`px-4 py-2 text-sm font-medium rounded-lg ${purchasing || !invoicePaymentDetails.modeOfPayment || !invoicePaymentDetails.paymentReceivedBy
+                                disabled={purchasing || !canSubmitPurchase}
+                                className={`px-4 py-2 text-sm font-medium rounded-lg ${purchasing || !canSubmitPurchase
                                     ? 'bg-primary-400 text-white cursor-not-allowed'
                                     : 'bg-primary-600 text-white hover:bg-primary-700'
                                     }`}
