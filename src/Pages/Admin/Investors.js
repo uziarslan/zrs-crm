@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
+import { useAuth } from '../../Context/AuthContext';
+import axios from 'axios';
 
 const AdminInvestors = () => {
+  const { user } = useAuth();
   const [investors, setInvestors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -10,12 +13,17 @@ const AdminInvestors = () => {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [documentLoading, setDocumentLoading] = useState(false);
+  const [openDropdownId, setOpenDropdownId] = useState(null);
+  const [adminInfo, setAdminInfo] = useState(null);
   const [inviteData, setInviteData] = useState({
     email: '',
     name: '',
+    investorEid: '',
     creditLimit: '',
     decidedPercentageMin: '0',
-    decidedPercentageMax: '0'
+    decidedPercentageMax: '0',
+    adminDesignation: ''
   });
   const [editData, setEditData] = useState({
     id: '',
@@ -79,9 +87,72 @@ const AdminInvestors = () => {
     return `${formatPercentage(normalizedMin)} - ${formatPercentage(normalizedMax)}`;
   };
 
+  const fetchAdminInfo = useCallback(async () => {
+    if (!user) return null;
+    try {
+      const baseURL = process.env.REACT_APP_END_POINT || 'http://localhost:4000/api/v1';
+      const authURL = baseURL.replace('/v1', '/auth/user');
+      const token = localStorage.getItem('token');
+      const response = await axios.get(authURL, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const fetchedUser = response.data.user || user;
+      setAdminInfo(fetchedUser);
+      return fetchedUser;
+    } catch (err) {
+      console.error('Failed to fetch admin info:', err);
+      // Fallback to user from context if API call fails
+      setAdminInfo(user);
+      return user;
+    }
+  }, [user]);
+
+  const handleViewDocument = async (investorId) => {
+    setDocumentLoading(true);
+    try {
+      const response = await axiosInstance.get(`/investors/${investorId}/agreement/document`);
+      const document = response.data.data;
+
+      // Convert base64 to blob
+      const byteCharacters = atob(document.content);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // Open in new window
+      const newWindow = window.open(blobUrl, '_blank');
+      
+      // Clean up blob URL after a delay to ensure it's loaded
+      if (newWindow) {
+        newWindow.addEventListener('load', () => {
+          setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+          }, 100);
+        });
+      } else {
+        // If popup was blocked, clean up immediately
+        URL.revokeObjectURL(blobUrl);
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to load document');
+    } finally {
+      setDocumentLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchInvestors();
-  }, []);
+    if (user) {
+      fetchAdminInfo();
+    }
+  }, [user, fetchAdminInfo]);
+
 
   const fetchInvestors = async () => {
     try {
@@ -140,14 +211,26 @@ const AdminInvestors = () => {
       const response = await axiosInstance.post('/investors', {
         email: inviteData.email,
         name: inviteData.name,
+        investorEid: inviteData.investorEid,
         creditLimit: creditLimitValue,
         decidedPercentageMin: decidedPercentageMinValue,
-        decidedPercentageMax: decidedPercentageMaxValue
+        decidedPercentageMax: decidedPercentageMaxValue,
+        adminDesignation: !adminInfo?.designation ? inviteData.adminDesignation : undefined
       });
 
       setShowInviteModal(false);
-      setInviteData({ email: '', name: '', creditLimit: '', decidedPercentageMin: '0', decidedPercentageMax: '0' });
       await fetchInvestors();
+      await fetchAdminInfo(); // Refresh admin info to get updated designation
+      // Reset inviteData - adminDesignation will be set by fetchAdminInfo if it exists
+      setInviteData({ 
+        email: '', 
+        name: '', 
+        investorEid: '', 
+        creditLimit: '', 
+        decidedPercentageMin: '0', 
+        decidedPercentageMax: '0', 
+        adminDesignation: adminInfo?.designation || '' 
+      });
       setSuccessMessage(response.data?.message || 'Investor added successfully.');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to add investor');
@@ -270,13 +353,21 @@ const AdminInvestors = () => {
           Total Investors: <span className="font-bold">{investors.length}</span>
         </div>
         <button
-          onClick={() => {
+          onClick={async () => {
+            // Fetch fresh admin info before opening modal
+            let currentAdminInfo = adminInfo;
+            if (user) {
+              const fetchedAdmin = await fetchAdminInfo();
+              currentAdminInfo = fetchedAdmin || adminInfo;
+            }
             setInviteData({
               email: '',
               name: '',
+              investorEid: '',
               creditLimit: '',
               decidedPercentageMin: '0',
-              decidedPercentageMax: '0'
+              decidedPercentageMax: '0',
+              adminDesignation: currentAdminInfo?.designation || ''
             });
             setError('');
             setSuccessMessage('');
@@ -298,6 +389,7 @@ const AdminInvestors = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Credit Limit</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Decided %</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Utilized</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Agreement Status</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
@@ -338,6 +430,111 @@ const AdminInvestors = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600">
                     AED {(Number(investor.utilizedAmount) || 0).toLocaleString()}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {investor.agreement ? (
+                      <div className="relative">
+                        <button
+                          onClick={() => setOpenDropdownId(openDropdownId === investor._id ? null : investor._id)}
+                          className={`px-2.5 py-1 inline-flex items-center gap-1.5 text-xs font-semibold rounded-md uppercase tracking-wide transition-all hover:shadow-sm ${
+                            investor.agreement.docuSignStatus === 'completed' ? 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100' :
+                            investor.agreement.docuSignStatus === 'sent' || investor.agreement.docuSignStatus === 'delivered' ? 'bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100' :
+                            investor.agreement.docuSignStatus === 'signed' ? 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100' :
+                            investor.agreement.docuSignStatus === 'declined' || investor.agreement.docuSignStatus === 'voided' ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100' :
+                            'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
+                          }`}
+                        >
+                          {investor.agreement.docuSignStatus === 'completed' ? (
+                            <>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span>Signed</span>
+                            </>
+                          ) : investor.agreement.docuSignStatus === 'sent' ? (
+                            <>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                              </svg>
+                              <span>Sent</span>
+                            </>
+                          ) : investor.agreement.docuSignStatus === 'delivered' ? (
+                            <>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                              </svg>
+                              <span>Delivered</span>
+                            </>
+                          ) : investor.agreement.docuSignStatus === 'signed' ? (
+                            <>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                              <span>Signed</span>
+                            </>
+                          ) : investor.agreement.docuSignStatus === 'declined' ? (
+                            <>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                              <span>Declined</span>
+                            </>
+                          ) : investor.agreement.docuSignStatus === 'voided' ? (
+                            <>
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                              </svg>
+                              <span>Voided</span>
+                            </>
+                          ) : (
+                            <span>{investor.agreement.docuSignStatus || 'N/A'}</span>
+                          )}
+                          {investor.agreement.hasDocuments && (
+                            <svg className="w-3 h-3 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          )}
+                        </button>
+                        
+                        {openDropdownId === investor._id && investor.agreement.hasDocuments && (
+                          <>
+                            <div 
+                              className="fixed inset-0 z-10" 
+                              onClick={() => setOpenDropdownId(null)}
+                            ></div>
+                            <div className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-20">
+                              <div className="py-1">
+                                <button
+                                  onClick={() => {
+                                    handleViewDocument(investor._id);
+                                    setOpenDropdownId(null);
+                                  }}
+                                  disabled={documentLoading}
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {documentLoading ? (
+                                    <>
+                                      <span className="animate-spin">⟳</span>
+                                      <span>Loading...</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                      </svg>
+                                      <span>View Agreement</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400 italic">—</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm flex items-center gap-2">
                     <button
@@ -419,6 +616,31 @@ const AdminInvestors = () => {
                 />
               </div>
               <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Emirates ID *</label>
+                <input
+                  type="text"
+                  required
+                  value={inviteData.investorEid}
+                  onChange={(e) => setInviteData({ ...inviteData, investorEid: e.target.value })}
+                  className="w-full border rounded px-3 py-2"
+                  placeholder="784-XXXX-XXXXXXX-X"
+                />
+              </div>
+              {!adminInfo?.designation && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Your Designation *</label>
+                  <input
+                    type="text"
+                    required
+                    value={inviteData.adminDesignation}
+                    onChange={(e) => setInviteData({ ...inviteData, adminDesignation: e.target.value })}
+                    className="w-full border rounded px-3 py-2"
+                    placeholder="e.g., CEO, Director, Manager"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">This will be saved and won't be asked next time.</p>
+                </div>
+              )}
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Credit Limit (AED) *</label>
                 <input
                   type="text"
@@ -495,9 +717,11 @@ const AdminInvestors = () => {
                     setInviteData({
                       email: '',
                       name: '',
+                      investorEid: '',
                       creditLimit: '',
                       decidedPercentageMin: '0',
-                      decidedPercentageMax: '0'
+                      decidedPercentageMax: '0',
+                      adminDesignation: adminInfo?.designation || ''
                     });
                   }}
                   className="flex-1 bg-gray-200 text-gray-700 py-2 rounded hover:bg-gray-300"
@@ -657,6 +881,7 @@ const AdminInvestors = () => {
           </div>
         </div>
       )}
+
     </DashboardLayout>
   );
 };
