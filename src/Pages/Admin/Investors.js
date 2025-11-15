@@ -17,6 +17,7 @@ const AdminInvestors = () => {
   const [resendingEmail, setResendingEmail] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState(null);
   const [adminInfo, setAdminInfo] = useState(null);
+  const [loadingInviteModal, setLoadingInviteModal] = useState(false);
   const [inviteData, setInviteData] = useState({
     email: '',
     name: '',
@@ -394,26 +395,34 @@ const AdminInvestors = () => {
         </div>
         <button
           onClick={async () => {
-            // Fetch fresh admin info before opening modal
-            let currentAdminInfo = adminInfo;
-            if (user) {
-              const fetchedAdmin = await fetchAdminInfo();
-              currentAdminInfo = fetchedAdmin || adminInfo;
+            setLoadingInviteModal(true);
+            try {
+              // Fetch fresh admin info before opening modal
+              let currentAdminInfo = adminInfo;
+              if (user) {
+                const fetchedAdmin = await fetchAdminInfo();
+                currentAdminInfo = fetchedAdmin || adminInfo;
+              }
+              setInviteData({
+                email: '',
+                name: '',
+                investorEid: '',
+                creditLimit: '',
+                decidedPercentageMin: '0',
+                decidedPercentageMax: '0',
+                adminDesignation: currentAdminInfo?.designation || ''
+              });
+              setError('');
+              setSuccessMessage('');
+              setShowInviteModal(true);
+            } catch (err) {
+              setError('Failed to load invite form');
+            } finally {
+              setLoadingInviteModal(false);
             }
-            setInviteData({
-              email: '',
-              name: '',
-              investorEid: '',
-              creditLimit: '',
-              decidedPercentageMin: '0',
-              decidedPercentageMax: '0',
-              adminDesignation: currentAdminInfo?.designation || ''
-            });
-            setError('');
-            setSuccessMessage('');
-            setShowInviteModal(true);
           }}
-          className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors"
+          disabled={loadingInviteModal}
+          className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + Invite Investor
         </button>
