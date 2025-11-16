@@ -314,7 +314,7 @@ const Negotiation = () => {
     const leadsPending = leads.length - leadsReady;
 
     return (
-        <DashboardLayout title="Negotiation">
+        <DashboardLayout>
             {/* Header Section */}
             <div className="mb-6">
                 <div className="flex items-center justify-between mb-4">

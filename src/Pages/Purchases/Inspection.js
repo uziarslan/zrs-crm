@@ -439,7 +439,7 @@ const Inspection = () => {
     const totalUnderInspection = leads.length;
 
     return (
-        <DashboardLayout title="Inspection">
+        <DashboardLayout>
             {/* Header Section */}
             <div className="mb-6">
                 <div className="flex items-center justify-between mb-4">

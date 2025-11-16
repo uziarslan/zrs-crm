@@ -354,7 +354,7 @@ const InspectionDetail = () => {
             showError('Purchase order not found');
             return;
         }
-        const docId = doc.documentId;
+        const docId = doc._id || doc.documentId;
         setViewingDocumentId(docId);
         try {
             const response = await axiosInstance.get(
@@ -415,7 +415,7 @@ const InspectionDetail = () => {
             showError('Purchase order not found');
             return;
         }
-        const docId = doc.documentId;
+        const docId = doc._id || doc.documentId;
         setDownloadingDocumentId(docId);
         try {
             const response = await axiosInstance.get(
@@ -2383,9 +2383,10 @@ const InspectionDetail = () => {
                                                                             </div>
                                                                             <div className="space-y-2">
                                                                                 {docuSignDocs.map((doc, docIndex) => {
-                                                                                    const docKey = doc.documentId || doc._id || `${allocation.investorId}-${docIndex}`;
-                                                                                    const isViewing = viewingDocumentId === doc.documentId;
-                                                                                    const isDownloading = downloadingDocumentId === doc.documentId;
+                                                                                    const docKey = doc._id || doc.documentId || `${allocation.investorId}-${docIndex}`;
+                                                                                    const keyId = doc._id || doc.documentId;
+                                                                                    const isViewing = keyId && viewingDocumentId === keyId;
+                                                                                    const isDownloading = keyId && downloadingDocumentId === keyId;
                                                                                     return (
                                                                                         <div key={docKey} className="flex items-center justify-between rounded-lg bg-white px-3 py-2">
                                                                                             <div className="mr-3 min-w-0">

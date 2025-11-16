@@ -208,11 +208,11 @@ const PurchaseLeads = () => {
       const result = [];
       let current = '';
       let inQuotes = false;
-      
+
       for (let i = 0; i < line.length; i++) {
         const char = line[i];
         const nextChar = line[i + 1];
-        
+
         if (char === '"') {
           if (inQuotes && nextChar === '"') {
             current += '"';
@@ -240,10 +240,10 @@ const PurchaseLeads = () => {
       normalized = normalized.replace(/\s+/g, ' ');
       return normalized;
     });
-    
+
     // Expected headers in normalized form (lowercase, spaces preserved for multi-word)
     const expectedHeaders = ['full name', 'phone', 'make', 'model', 'year', 'mileage', 'color', 'trim', 'region', 'asking price', 'source', 'priority'];
-    
+
     // Validate headers (check normalized versions)
     const missingHeaders = expectedHeaders.filter(h => !headers.includes(h));
     if (missingHeaders.length > 0) {
@@ -324,7 +324,7 @@ const PurchaseLeads = () => {
     try {
       const text = await file.text();
       const parsed = parseCSV(text);
-      
+
       if (parsed.length === 0) {
         setNotification({ show: true, message: 'No valid leads found in CSV file', type: 'error' });
         setTimeout(() => setNotification({ show: false, message: '', type: 'success' }), 5000);
@@ -380,13 +380,13 @@ const PurchaseLeads = () => {
       }));
 
       const response = await axiosInstance.post('/purchases/leads/bulk', { leads: leadsData });
-      
+
       const { stats } = response.data;
       let message = `Successfully created ${stats.created} lead(s)`;
       if (stats.failed > 0) {
         message += `. ${stats.failed} lead(s) failed to create.`;
       }
-      
+
       setNotification({ show: true, message, type: stats.failed > 0 ? 'warning' : 'success' });
       setTimeout(() => setNotification({ show: false, message: '', type: 'success' }), 5000);
       setShowBulkUploadModal(false);
@@ -413,7 +413,7 @@ const PurchaseLeads = () => {
   }
 
   return (
-    <DashboardLayout title="Purchase Leads">
+    <DashboardLayout>
       {/* Header Section */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -482,11 +482,10 @@ const PurchaseLeads = () => {
       )}
 
       {notification.show && (
-        <div className={`mb-4 border-l-4 p-4 rounded-r-lg ${
-          notification.type === 'success' ? 'bg-green-50 border-green-400' :
-          notification.type === 'warning' ? 'bg-yellow-50 border-yellow-400' :
-          'bg-red-50 border-red-400'
-        }`}>
+        <div className={`mb-4 border-l-4 p-4 rounded-r-lg ${notification.type === 'success' ? 'bg-green-50 border-green-400' :
+            notification.type === 'warning' ? 'bg-yellow-50 border-yellow-400' :
+              'bg-red-50 border-red-400'
+          }`}>
           <div className="flex items-center justify-between">
             <div className="flex">
               {notification.type === 'success' ? (
@@ -502,11 +501,10 @@ const PurchaseLeads = () => {
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
               )}
-              <p className={`ml-3 text-sm ${
-                notification.type === 'success' ? 'text-green-700' :
-                notification.type === 'warning' ? 'text-yellow-700' :
-                'text-red-700'
-              }`}>{notification.message}</p>
+              <p className={`ml-3 text-sm ${notification.type === 'success' ? 'text-green-700' :
+                  notification.type === 'warning' ? 'text-yellow-700' :
+                    'text-red-700'
+                }`}>{notification.message}</p>
             </div>
             <button
               onClick={() => setNotification({ show: false, message: '', type: 'success' })}
@@ -561,8 +559,8 @@ const PurchaseLeads = () => {
                   onClick={handleBulkStatusUpdate}
                   disabled={!bulkStatus}
                   className={`inline-flex items-center px-5 py-2.5 text-sm font-semibold rounded-lg shadow-md transition-all ${bulkStatus
-                      ? 'text-white bg-primary-600 hover:bg-primary-700 hover:shadow-lg'
-                      : 'text-gray-400 bg-gray-200 cursor-not-allowed'
+                    ? 'text-white bg-primary-600 hover:bg-primary-700 hover:shadow-lg'
+                    : 'text-gray-400 bg-gray-200 cursor-not-allowed'
                     }`}
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -863,11 +861,10 @@ const PurchaseLeads = () => {
                   <button
                     onClick={applyBulkAssign}
                     disabled={!bulkAssignAll}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      bulkAssignAll
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${bulkAssignAll
                         ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                         : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    }`}
+                      }`}
                   >
                     Apply to All
                   </button>
@@ -981,11 +978,10 @@ const PurchaseLeads = () => {
                 <button
                   onClick={handleBulkUploadSubmit}
                   disabled={uploading || parsedLeads.length === 0}
-                  className={`px-5 py-2.5 text-sm font-semibold rounded-lg transition-all ${
-                    uploading || parsedLeads.length === 0
+                  className={`px-5 py-2.5 text-sm font-semibold rounded-lg transition-all ${uploading || parsedLeads.length === 0
                       ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                       : 'bg-primary-600 text-white hover:bg-primary-700'
-                  }`}
+                    }`}
                 >
                   {uploading ? (
                     <span className="inline-flex items-center gap-2">

@@ -32,7 +32,7 @@ const InvestorInventory = () => {
     const colors = {
       purchased: 'bg-blue-100 text-blue-800',
       in_inventory: 'bg-purple-100 text-purple-800',
-      ready_for_sale: 'bg-green-100 text-green-800',
+      sale: 'bg-green-100 text-green-800',
       test_drive: 'bg-yellow-100 text-yellow-800',
       sold: 'bg-gray-100 text-gray-800'
     };
