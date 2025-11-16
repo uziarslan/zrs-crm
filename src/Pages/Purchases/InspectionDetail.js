@@ -11,15 +11,29 @@ import RegistrationCardIcon from '../../assets/icons/registration-card.svg';
 import CarPicturesIcon from '../../assets/icons/car-pictures.svg';
 import OnlineHistoryCheckIcon from '../../assets/icons/online-history-check.svg';
 
-const AUTO_SAVE_DELAY = 600;
-
 const InspectionDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const { user } = useAuth();
     const [lead, setLead] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+    const [notification, setNotification] = useState({ show: false, message: '', type: 'error' });
+
+    // Helper functions to show notifications
+    const showError = useCallback((message) => {
+        setNotification({ show: true, message, type: 'error' });
+        setTimeout(() => setNotification({ show: false, message: '', type: 'error' }), 5000);
+    }, []);
+
+    const showSuccess = useCallback((message) => {
+        setNotification({ show: true, message, type: 'success' });
+        setTimeout(() => setNotification({ show: false, message: '', type: 'success' }), 5000);
+    }, []);
+
+    const showWarning = useCallback((message) => {
+        setNotification({ show: true, message, type: 'warning' });
+        setTimeout(() => setNotification({ show: false, message: '', type: 'warning' }), 5000);
+    }, []);
     const [activeTab, setActiveTab] = useState('pricing');
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
@@ -43,6 +57,13 @@ const InspectionDetail = () => {
         maxSellingPrice: '',
         purchasedFinalPrice: ''
     });
+    const [jobCosting, setJobCosting] = useState({
+        transferCost: '',
+        detailing_inspection_cost: '',
+        agent_commision: '',
+        car_recovery_cost: '',
+        other_charges: ''
+    });
     const [chassisNumber, setChassisNumber] = useState('');
     const [savingPrice, setSavingPrice] = useState(false);
     const [investors, setInvestors] = useState([]);
@@ -54,24 +75,9 @@ const InspectionDetail = () => {
     const [investorAllocations, setInvestorAllocations] = useState([]);
     const [savingInvestorAllocations, setSavingInvestorAllocations] = useState(false);
     const [newInvestorId, setNewInvestorId] = useState('');
-    const [newInvestorPercentage, setNewInvestorPercentage] = useState('');
+    const [newInvestorOwnershipPercentage, setNewInvestorOwnershipPercentage] = useState('');
     const [newInvestorAmount, setNewInvestorAmount] = useState('');
-    const [showPOFieldsModal, setShowPOFieldsModal] = useState(false);
-    const [savingPOFields, setSavingPOFields] = useState(false);
-    const [poFields, setPOFields] = useState({
-        transferCost: '',
-        detailing_inspection_cost: '',
-        agent_commision: '',
-        car_recovery_cost: '',
-        other_charges: '',
-        total_investment: '',
-        transferCostInvestor: '',
-        detailingInspectionCostInvestor: '',
-        agentCommissionInvestor: '',
-        carRecoveryCostInvestor: '',
-        otherChargesInvestor: ''
-    });
-    const [poFieldsError, setPOFieldsError] = useState('');
+    const [newInvestorProfitPercentage, setNewInvestorProfitPercentage] = useState('');
     const [viewingDocumentId, setViewingDocumentId] = useState(null);
     const [downloadingDocumentId, setDownloadingDocumentId] = useState(null);
     const [showInvoiceModal, setShowInvoiceModal] = useState(false);
@@ -81,7 +87,7 @@ const InspectionDetail = () => {
     const [perInvestorPayments, setPerInvestorPayments] = useState({});
     const [admins, setAdmins] = useState([]);
 
-    const autoSaveTimeoutRef = useRef(null);
+    const lastNewInvestorInputRef = useRef(null);
 
     const documentCategories = [
         { key: 'inspectionReport', label: 'Inspection Report', accept: '.pdf', multiple: false, IconComponent: InspectionReportIcon },
@@ -128,13 +134,19 @@ const InspectionDetail = () => {
         }
     }, [showInvoiceModal]);
 
+    // Scroll to top of page when notification appears
     useEffect(() => {
-        return () => {
-            if (autoSaveTimeoutRef.current) {
-                clearTimeout(autoSaveTimeoutRef.current);
-            }
-        };
-    }, []);
+        if (notification.show) {
+            // Small delay to ensure the notification is rendered
+            setTimeout(() => {
+                window.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
+            }, 100);
+        }
+    }, [notification.show]);
+
 
     // Update selected investor when lead or investors change
     const fetchLead = useCallback(async () => {
@@ -147,8 +159,9 @@ const InspectionDetail = () => {
                 setInvestorAllocations(
                     leadData.investorAllocations.map((allocation) => ({
                         investorId: allocation.investorId?._id || allocation.investorId,
-                        percentage: allocation.percentage != null ? allocation.percentage.toString() : '',
-                        amount: allocation.amount != null ? allocation.amount.toString() : ''
+                        ownershipPercentage: allocation.ownershipPercentage != null ? allocation.ownershipPercentage.toString() : (allocation.percentage != null ? allocation.percentage.toString() : ''),
+                        amount: allocation.amount != null ? allocation.amount.toString() : '',
+                        profitPercentage: allocation.profitPercentage != null ? allocation.profitPercentage.toString() : ''
                     }))
                 );
             } else {
@@ -163,18 +176,23 @@ const InspectionDetail = () => {
                 });
             }
 
-            setError('');
-        } catch (err) {
-            setError(err.response?.data?.message || 'Failed to fetch lead');
-        } finally {
-            if (autoSaveTimeoutRef.current) {
-                clearTimeout(autoSaveTimeoutRef.current);
-                autoSaveTimeoutRef.current = null;
+            if (leadData.jobCosting) {
+                setJobCosting({
+                    transferCost: leadData.jobCosting.transferCost || '',
+                    detailing_inspection_cost: leadData.jobCosting.detailing_inspection_cost || '',
+                    agent_commision: leadData.jobCosting.agent_commision || '',
+                    car_recovery_cost: leadData.jobCosting.car_recovery_cost || '',
+                    other_charges: leadData.jobCosting.other_charges || ''
+                });
             }
+        } catch (err) {
+            const errorMessage = err.response?.data?.message || 'Failed to fetch lead';
+            showError(errorMessage);
+        } finally {
             setLoading(false);
             setSavingInvestorAllocations(false);
         }
-    }, [id]);
+    }, [id, showError]);
 
     useEffect(() => {
         fetchLead();
@@ -189,7 +207,7 @@ const InspectionDetail = () => {
                 file.type === 'image/jpeg' ||
                 file.type === 'image/jpg';
             if (!isValid) {
-                alert(`${file.name} is not a valid file type. Only PDF, PNG, and JPG are allowed.`);
+                showError(`${file.name} is not a valid file type. Only PDF, PNG, and JPG are allowed.`);
             }
             return isValid;
         });
@@ -197,7 +215,7 @@ const InspectionDetail = () => {
         const validSizeFiles = validFiles.filter(file => {
             const isValid = file.size <= 10 * 1024 * 1024;
             if (!isValid) {
-                alert(`${file.name} is too large. Maximum file size is 10MB.`);
+                showError(`${file.name} is too large. Maximum file size is 10MB.`);
             }
             return isValid;
         });
@@ -231,7 +249,7 @@ const InspectionDetail = () => {
             documents.onlineHistoryCheck;
 
         if (!hasFiles) {
-            alert('Please select at least one file to upload');
+            showWarning('Please select at least one file to upload');
             return;
         }
 
@@ -264,7 +282,7 @@ const InspectionDetail = () => {
                 }
             });
 
-            alert('Documents uploaded successfully!');
+            showSuccess('Documents uploaded successfully!');
             setDocuments({
                 inspectionReport: null,
                 registrationCard: null,
@@ -274,7 +292,7 @@ const InspectionDetail = () => {
             setUploadProgress(0);
             fetchLead();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to upload documents');
+            showError(err.response?.data?.message || 'Failed to upload documents');
         } finally {
             setUploading(false);
         }
@@ -298,7 +316,7 @@ const InspectionDetail = () => {
             window.open(blobUrl, '_blank');
             setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to view document');
+            showError(err.response?.data?.message || 'Failed to view document');
         } finally {
             setViewingDocumentId(null);
         }
@@ -321,7 +339,7 @@ const InspectionDetail = () => {
             document.body.removeChild(link);
             setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to download document');
+            showError(err.response?.data?.message || 'Failed to download document');
         } finally {
             setDownloadingDocumentId(null);
         }
@@ -329,11 +347,11 @@ const InspectionDetail = () => {
 
     const handleViewDocuSignDocument = useCallback(async (doc) => {
         if (!doc?.documentId) {
-            alert('Document not available');
+            showError('Document not available');
             return;
         }
         if (!lead?.purchaseOrder?._id) {
-            alert('Purchase order not found');
+            showError('Purchase order not found');
             return;
         }
         const docId = doc.documentId;
@@ -382,19 +400,19 @@ const InspectionDetail = () => {
 
             setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60 * 1000);
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to view signed document');
+            showError(err.response?.data?.message || 'Failed to view signed document');
         } finally {
             setViewingDocumentId(null);
         }
-    }, [lead?.purchaseOrder?._id]);
+    }, [lead?.purchaseOrder?._id, showError]);
 
     const handleDownloadDocuSignDocument = useCallback(async (doc) => {
         if (!doc?.documentId) {
-            alert('Document not available');
+            showError('Document not available');
             return;
         }
         if (!lead?.purchaseOrder?._id) {
-            alert('Purchase order not found');
+            showError('Purchase order not found');
             return;
         }
         const docId = doc.documentId;
@@ -417,11 +435,11 @@ const InspectionDetail = () => {
             document.body.removeChild(link);
             setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60 * 1000);
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to download signed document');
+            showError(err.response?.data?.message || 'Failed to download signed document');
         } finally {
             setDownloadingDocumentId(null);
         }
-    }, [lead?.purchaseOrder?._id]);
+    }, [lead?.purchaseOrder?._id, showError]);
 
     const handleDeleteDocument = (docId, fileName) => {
         setDocumentToDelete({ id: docId, name: fileName });
@@ -441,7 +459,7 @@ const InspectionDetail = () => {
             setDocumentToDelete(null);
             fetchLead();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to delete document');
+            showError(err.response?.data?.message || 'Failed to delete document');
         } finally {
             setIsDeletingDoc(false);
         }
@@ -449,7 +467,7 @@ const InspectionDetail = () => {
 
     const handleAddNote = async () => {
         if (!notes.trim()) {
-            alert('Please enter a note');
+            showWarning('Please enter a note');
             return;
         }
 
@@ -458,11 +476,11 @@ const InspectionDetail = () => {
                 status: lead.status,
                 notes: notes.trim()
             });
-            alert('Note added successfully!');
+            showSuccess('Note added successfully!');
             setNotes('');
             fetchLead();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to add note');
+            showError(err.response?.data?.message || 'Failed to add note');
         }
     };
 
@@ -494,7 +512,7 @@ const InspectionDetail = () => {
 
     const handleSaveNoteEdit = async (noteId) => {
         if (!editingNoteContent.trim()) {
-            alert('Note content cannot be empty');
+            showWarning('Note content cannot be empty');
             return;
         }
 
@@ -502,12 +520,12 @@ const InspectionDetail = () => {
             await axiosInstance.put(`/purchases/leads/${id}/notes/${noteId}`, {
                 content: editingNoteContent.trim()
             });
-            alert('Note updated successfully!');
+            showSuccess('Note updated successfully!');
             setEditingNoteId(null);
             setEditingNoteContent('');
             fetchLead();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to update note');
+            showError(err.response?.data?.message || 'Failed to update note');
         }
     };
 
@@ -529,7 +547,7 @@ const InspectionDetail = () => {
             setDeletingNoteId(null);
             fetchLead();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to delete note');
+            showError(err.response?.data?.message || 'Failed to delete note');
         } finally {
             setIsDeleting(false);
         }
@@ -563,7 +581,8 @@ const InspectionDetail = () => {
 
     const isPriceAnalysisComplete = () => {
         const pa = lead?.priceAnalysis || {};
-        return Boolean(pa.minSellingPrice && pa.maxSellingPrice && pa.purchasedFinalPrice);
+        const jc = lead?.jobCosting || {};
+        return Boolean(pa.minSellingPrice && pa.maxSellingPrice && pa.purchasedFinalPrice && jc.transferCost && jc.detailing_inspection_cost);
     };
 
     const getInvestorDetails = useCallback((investorId) => {
@@ -644,31 +663,7 @@ const InspectionDetail = () => {
         }, {});
     }, [lead?.purchaseOrder?.docuSignEnvelopes]);
 
-    const chargeInvestorOptions = useMemo(() => {
-        const seen = new Set();
-        return investorAllocations.reduce((acc, allocation) => {
-            const rawId = allocation?.investorId?._id || allocation?.investorId;
-            if (!rawId) {
-                return acc;
-            }
-            const id = rawId.toString();
-            if (seen.has(id)) {
-                return acc;
-            }
-            seen.add(id);
-            const details = getInvestorDetails(id);
-            acc.push({
-                id,
-                label: details?.name || details?.email || 'Investor'
-            });
-            return acc;
-        }, []);
-    }, [investorAllocations, getInvestorDetails]);
 
-    const closePOFieldsModal = () => {
-        setShowPOFieldsModal(false);
-        setPOFieldsError('');
-    };
 
     const docuSignEnvelopeIdToInvestorMap = useMemo(() => {
         const envelopes = lead?.purchaseOrder?.docuSignEnvelopes || [];
@@ -793,8 +788,49 @@ const InspectionDetail = () => {
         return sum + (Number.isNaN(value) ? 0 : value);
     }, 0);
 
-    const purchasePrice = Number(lead?.priceAnalysis?.purchasedFinalPrice || 0);
-    const remainingPurchaseAmount = purchasePrice > 0 ? Math.max(purchasePrice - totalAmount, 0) : null;
+    // Calculate final price: purchasedFinalPrice + all job costs
+    // Use state values if available (for real-time calculation), otherwise fall back to lead data
+    // Ensure proper number conversion by converting to string first, removing commas, then parsing
+    const purchasedFinalPriceFromState = priceAnalysis.purchasedFinalPrice
+        ? parseFloat(String(priceAnalysis.purchasedFinalPrice).replace(/,/g, '').trim())
+        : null;
+    const purchasedFinalPriceFromLead = lead?.priceAnalysis?.purchasedFinalPrice
+        ? parseFloat(String(lead.priceAnalysis.purchasedFinalPrice).replace(/,/g, '').trim())
+        : 0;
+    const purchasedFinalPrice = purchasedFinalPriceFromState !== null && !isNaN(purchasedFinalPriceFromState)
+        ? purchasedFinalPriceFromState
+        : (!isNaN(purchasedFinalPriceFromLead) ? purchasedFinalPriceFromLead : 0);
+
+    // Use state values if available, otherwise fall back to lead data
+    const jobCostingFromState = jobCosting;
+    const jobCostingFromLead = lead?.jobCosting || {};
+    const parseJobCostValue = (stateVal, leadVal) => {
+        if (stateVal !== '' && stateVal != null) {
+            const parsed = parseFloat(String(stateVal).replace(/,/g, '').trim());
+            return !isNaN(parsed) ? parsed : 0;
+        }
+        if (leadVal !== '' && leadVal != null) {
+            const parsed = parseFloat(String(leadVal).replace(/,/g, '').trim());
+            return !isNaN(parsed) ? parsed : 0;
+        }
+        return 0;
+    };
+
+    const jobCostingData = {
+        transferCost: parseJobCostValue(jobCostingFromState.transferCost, jobCostingFromLead.transferCost),
+        detailing_inspection_cost: parseJobCostValue(jobCostingFromState.detailing_inspection_cost, jobCostingFromLead.detailing_inspection_cost),
+        agent_commision: parseJobCostValue(jobCostingFromState.agent_commision, jobCostingFromLead.agent_commision),
+        car_recovery_cost: parseJobCostValue(jobCostingFromState.car_recovery_cost, jobCostingFromLead.car_recovery_cost),
+        other_charges: parseJobCostValue(jobCostingFromState.other_charges, jobCostingFromLead.other_charges)
+    };
+
+    const finalPrice = purchasedFinalPrice +
+        jobCostingData.transferCost +
+        jobCostingData.detailing_inspection_cost +
+        jobCostingData.agent_commision +
+        jobCostingData.car_recovery_cost +
+        jobCostingData.other_charges;
+    const remainingPurchaseAmount = finalPrice > 0 ? Math.max(finalPrice - totalAmount, 0) : null;
 
     const formatCurrency = (value) => {
         if (value == null || Number.isNaN(Number(value))) return 'N/A';
@@ -811,7 +847,6 @@ const InspectionDetail = () => {
 
         try {
             setSavingInvestorAllocations(true);
-            setError('');
 
             if (allocations.length === 0) {
                 await axiosInstance.put(`/purchases/leads/${id}/investor`, {
@@ -824,41 +859,87 @@ const InspectionDetail = () => {
             let runningAmount = 0;
             let runningPercentage = 0;
 
+            // Calculate final price for validation (use same logic as getCurrentFinalPrice)
+            const parseCost = (val) => {
+                if (val !== '' && val != null) {
+                    const parsed = parseFloat(String(val).replace(/,/g, '').trim());
+                    return !isNaN(parsed) ? parsed : 0;
+                }
+                return 0;
+            };
+
+            const purchasedFinalPriceForValidation = priceAnalysis.purchasedFinalPrice
+                ? parseFloat(String(priceAnalysis.purchasedFinalPrice).replace(/,/g, '').trim())
+                : (lead?.priceAnalysis?.purchasedFinalPrice
+                    ? parseFloat(String(lead.priceAnalysis.purchasedFinalPrice).replace(/,/g, '').trim())
+                    : 0);
+
+            const finalPriceForValidation = (isNaN(purchasedFinalPriceForValidation) ? 0 : purchasedFinalPriceForValidation) +
+                parseCost(jobCosting.transferCost || lead?.jobCosting?.transferCost) +
+                parseCost(jobCosting.detailing_inspection_cost || lead?.jobCosting?.detailing_inspection_cost) +
+                parseCost(jobCosting.agent_commision || lead?.jobCosting?.agent_commision) +
+                parseCost(jobCosting.car_recovery_cost || lead?.jobCosting?.car_recovery_cost) +
+                parseCost(jobCosting.other_charges || lead?.jobCosting?.other_charges);
+
             const payload = allocations.map((allocation) => {
-                const percentage = parseFloat(allocation.percentage);
-                if (Number.isNaN(percentage) || percentage <= 0) {
-                    throw new Error('Each investor allocation must have a valid percentage greater than 0.');
+                // Ownership percentage (for calculating amount)
+                const ownershipPercentageStr = allocation.ownershipPercentage || allocation.percentage || '';
+                const ownershipPercentage = ownershipPercentageStr !== '' ? parseFloat(String(ownershipPercentageStr).replace(/,/g, '').trim()) : 0;
+                if (Number.isNaN(ownershipPercentage) || ownershipPercentage <= 0) {
+                    throw new Error('Each investor allocation must have a valid ownership percentage greater than 0.');
                 }
-                const { min, max } = getInvestorRange(allocation.investorId);
-                if (percentage < min || percentage > max) {
-                    throw new Error(`Allocation for investor must be between ${min}% and ${max}%`);
+                if (ownershipPercentage > 100) {
+                    throw new Error('Ownership percentage cannot exceed 100%.');
                 }
-                const amount = allocation.amount !== '' ? parseFloat(allocation.amount) : (purchasePrice > 0 ? Number(((percentage / 100) * purchasePrice).toFixed(2)) : 0);
-                if (Number.isNaN(amount) || amount <= 0) {
+
+                // Calculate amount based on ownership percentage and final price
+                // Use more precise calculation to avoid rounding errors
+                let amount = 0;
+                const amountStr = allocation.amount || '';
+                if (amountStr !== '' && amountStr !== null && amountStr !== undefined) {
+                    amount = parseFloat(String(amountStr).replace(/,/g, '').trim());
+                    if (Number.isNaN(amount)) {
+                        // If amount is invalid, calculate from percentage
+                        amount = finalPriceForValidation > 0 ? Math.round(((ownershipPercentage / 100) * finalPriceForValidation) * 100) / 100 : 0;
+                    }
+                } else {
+                    // Calculate from percentage if amount not provided
+                    amount = finalPriceForValidation > 0 ? Math.round(((ownershipPercentage / 100) * finalPriceForValidation) * 100) / 100 : 0;
+                }
+
+                if (amount <= 0) {
                     throw new Error('Each investor allocation must have a valid amount greater than 0.');
                 }
-                if (purchasePrice > 0 && amount > purchasePrice) {
-                    throw new Error('Investor amount cannot exceed the purchased final price.');
+                if (finalPriceForValidation > 0 && amount > finalPriceForValidation) {
+                    throw new Error('Investor amount cannot exceed the final price.');
                 }
+
                 runningAmount += amount;
-                runningPercentage += percentage;
+                runningPercentage += ownershipPercentage;
+
                 return {
                     investorId: allocation.investorId,
-                    percentage,
-                    amount
+                    ownershipPercentage,
+                    amount,
+                    profitPercentage: allocation.profitPercentage != null && allocation.profitPercentage !== '' ? parseFloat(allocation.profitPercentage) : undefined
                 };
             });
 
             if (runningPercentage > 100.0001) {
-                throw new Error('Total allocation cannot exceed 100%.');
+                throw new Error('Total ownership percentage cannot exceed 100%.');
             }
 
-            if (purchasePrice > 0 && runningAmount > purchasePrice + 0.0001) {
-                throw new Error('Total investor amount cannot exceed the purchased final price.');
+            if (finalPriceForValidation > 0 && runningAmount > finalPriceForValidation + 0.0001) {
+                throw new Error('Total investor amount cannot exceed the final price.');
             }
 
             await axiosInstance.put(`/purchases/leads/${id}/investor`, {
-                investorAllocations: payload
+                investorAllocations: payload.map(({ investorId, ownershipPercentage, amount, profitPercentage }) => ({
+                    investorId,
+                    ownershipPercentage,
+                    amount,
+                    profitPercentage: profitPercentage !== undefined ? profitPercentage : null
+                }))
             });
             setLead((prev) => {
                 if (!prev) {
@@ -885,161 +966,225 @@ const InspectionDetail = () => {
                 };
             });
         } catch (err) {
-            setError(err.response?.data?.message || err.message || 'Failed to save investor allocations');
+            showError(err.response?.data?.message || err.message || 'Failed to save investor allocations');
         } finally {
-            if (autoSaveTimeoutRef.current) {
-                clearTimeout(autoSaveTimeoutRef.current);
-                autoSaveTimeoutRef.current = null;
-            }
             setSavingInvestorAllocations(false);
         }
-    }, [getInvestorRange, id, purchasePrice]);
+    }, [id, priceAnalysis.purchasedFinalPrice, jobCosting, lead, showError]);
 
-    const scheduleInvestorAllocationSave = useCallback((nextAllocations) => {
-        if (!Array.isArray(nextAllocations)) {
-            return;
-        }
+    // Helper to get the latest final price for investor calculations
+    const getCurrentFinalPrice = useCallback(() => {
+        const currentPurchasedFinalPrice = priceAnalysis.purchasedFinalPrice
+            ? parseFloat(String(priceAnalysis.purchasedFinalPrice).replace(/,/g, '').trim())
+            : (lead?.priceAnalysis?.purchasedFinalPrice
+                ? parseFloat(String(lead.priceAnalysis.purchasedFinalPrice).replace(/,/g, '').trim())
+                : 0);
 
-        const hasIncompleteAllocation = nextAllocations.some((allocation) => {
-            const percentageValue = parseFloat(allocation.percentage);
-            const amountValue = parseFloat(allocation.amount);
-            return (
-                allocation.percentage === '' ||
-                Number.isNaN(percentageValue) ||
-                percentageValue <= 0 ||
-                allocation.amount === '' ||
-                Number.isNaN(amountValue) ||
-                amountValue <= 0
-            );
-        });
-
-        if (hasIncompleteAllocation) {
-            if (autoSaveTimeoutRef.current) {
-                clearTimeout(autoSaveTimeoutRef.current);
-                autoSaveTimeoutRef.current = null;
+        const parseCost = (val) => {
+            if (val !== '' && val != null) {
+                const parsed = parseFloat(String(val).replace(/,/g, '').trim());
+                return !isNaN(parsed) ? parsed : 0;
             }
-            return;
-        }
+            return 0;
+        };
 
-        if (autoSaveTimeoutRef.current) {
-            clearTimeout(autoSaveTimeoutRef.current);
-        }
-        autoSaveTimeoutRef.current = setTimeout(() => {
-            saveInvestorAllocations(nextAllocations);
-        }, AUTO_SAVE_DELAY);
-    }, [saveInvestorAllocations]);
+        return (isNaN(currentPurchasedFinalPrice) ? 0 : currentPurchasedFinalPrice) +
+            parseCost(jobCosting.transferCost || lead?.jobCosting?.transferCost) +
+            parseCost(jobCosting.detailing_inspection_cost || lead?.jobCosting?.detailing_inspection_cost) +
+            parseCost(jobCosting.agent_commision || lead?.jobCosting?.agent_commision) +
+            parseCost(jobCosting.car_recovery_cost || lead?.jobCosting?.car_recovery_cost) +
+            parseCost(jobCosting.other_charges || lead?.jobCosting?.other_charges);
+    }, [priceAnalysis.purchasedFinalPrice, jobCosting, lead]);
 
-    const handleAllocationPercentageChange = (index, value) => {
-        setInvestorAllocations((prev) => {
-            const updated = [...prev];
-            updated[index] = {
-                ...updated[index],
-                percentage: value.replace(/[^\d.]/g, '')
-            };
-            scheduleInvestorAllocationSave(updated);
-            return updated;
-        });
-    };
-
-    const handleAllocationAmountChange = (index, value) => {
-        setInvestorAllocations((prev) => {
-            const updated = [...prev];
-            updated[index] = {
-                ...updated[index],
-                amount: value.replace(/[^\d.]/g, '')
-            };
-            scheduleInvestorAllocationSave(updated);
-            return updated;
-        });
-    };
 
     const handleRemoveInvestor = (investorId) => {
-        setInvestorAllocations((prev) => {
-            const updated = prev.filter((allocation) => allocation.investorId !== investorId);
-            scheduleInvestorAllocationSave(updated);
-            return updated;
+        // Normalize investorId for comparison (handle both object and string)
+        const normalizedId = investorId?._id ? investorId._id.toString() : investorId?.toString();
+
+        // Calculate the updated allocations
+        const updated = investorAllocations.filter((allocation) => {
+            const allocationId = allocation.investorId?._id ? allocation.investorId._id.toString() : allocation.investorId?.toString();
+            return allocationId !== normalizedId;
         });
+
+        // Update state
+        setInvestorAllocations(updated);
+
+        // Save the updated allocations to backend
+        saveInvestorAllocations(updated);
+    };
+
+    const handleNewInvestorOwnershipPercentageChange = (value) => {
+        const cleanValue = value.replace(/[^\d.]/g, '');
+        lastNewInvestorInputRef.current = 'percentage';
+        setNewInvestorOwnershipPercentage(cleanValue);
+    };
+
+    const handleNewInvestorAmountChange = (value) => {
+        const cleanValue = value.replace(/[^\d.]/g, '');
+        lastNewInvestorInputRef.current = 'amount';
+        setNewInvestorAmount(cleanValue);
     };
 
     const handleAddInvestor = () => {
         if (!newInvestorId) {
-            setError('Please select an investor to add.');
+            showError('Please select an investor to add.');
             return;
         }
         if (investorAllocations.some((allocation) => allocation.investorId === newInvestorId)) {
-            setError('Investor already added.');
+            showError('Investor already added.');
             return;
         }
-        const range = getInvestorRange(newInvestorId);
-        const percentageValue = newInvestorPercentage !== '' ? parseFloat(newInvestorPercentage) : range.min;
-        const clampedPercentage = Number.isNaN(percentageValue) ? range.min : Math.min(Math.max(percentageValue, range.min), range.max);
-        const defaultAmount = purchasePrice > 0 ? Number(((clampedPercentage / 100) * purchasePrice).toFixed(2)) : 0;
-        let amountValue = newInvestorAmount !== '' ? parseFloat(newInvestorAmount) : defaultAmount;
-        if (Number.isNaN(amountValue)) {
-            amountValue = defaultAmount;
+
+        // Use the same final price calculation as the save function
+        const currentFinalPrice = getCurrentFinalPrice();
+
+        // Calculate ownership percentage and amount
+        let ownershipPercentageValue = 0;
+        let amountValue = 0;
+
+        if (newInvestorOwnershipPercentage !== '' && !Number.isNaN(parseFloat(newInvestorOwnershipPercentage))) {
+            ownershipPercentageValue = parseFloat(newInvestorOwnershipPercentage);
+            if (currentFinalPrice > 0) {
+                // Use more precise calculation to avoid rounding errors
+                // Ensure we're working with actual numbers
+                const ownershipPerc = Number(ownershipPercentageValue);
+                const finalPriceNum = Number(currentFinalPrice);
+                amountValue = Math.round(((ownershipPerc / 100) * finalPriceNum) * 100) / 100;
+            } else {
+                showError('Final price must be greater than 0 to calculate amount from percentage.');
+                return;
+            }
+        } else if (newInvestorAmount !== '' && !Number.isNaN(parseFloat(newInvestorAmount))) {
+            amountValue = parseFloat(newInvestorAmount);
+            if (currentFinalPrice > 0) {
+                const amountNum = Number(amountValue);
+                const finalPriceNum = Number(currentFinalPrice);
+                ownershipPercentageValue = Number(((amountNum / finalPriceNum) * 100).toFixed(2));
+            } else {
+                showError('Final price must be greater than 0 to calculate percentage from amount.');
+                return;
+            }
+        } else {
+            showError('Please enter either ownership percentage or amount.');
+            return;
         }
+
+        if (ownershipPercentageValue <= 0 || ownershipPercentageValue > 100) {
+            showError('Ownership percentage must be between 0 and 100.');
+            return;
+        }
+
         if (amountValue <= 0) {
-            setError('Investor amount must be greater than 0.');
+            showError('Amount must be greater than 0.');
             return;
         }
-        if (purchasePrice > 0) {
-            if (amountValue > purchasePrice) {
-                setError('Investor amount cannot exceed the purchased final price.');
+
+        if (currentFinalPrice > 0) {
+            if (amountValue > currentFinalPrice) {
+                showError('Investor amount cannot exceed the final price.');
                 return;
             }
             const newTotalAmount = totalAmount + amountValue;
-            if (newTotalAmount > purchasePrice + 0.0001) {
-                setError('Total investor amount cannot exceed the purchased final price.');
+            if (newTotalAmount > currentFinalPrice + 0.0001) {
+                showError('Total investor amount cannot exceed the final price.');
                 return;
             }
         }
-        setError('');
-        setInvestorAllocations((prev) => {
-            const updated = [
-                ...prev,
-                {
-                    investorId: newInvestorId,
-                    percentage: clampedPercentage.toString(),
-                    amount: amountValue.toString()
-                }
-            ];
-            scheduleInvestorAllocationSave(updated);
-            return updated;
-        });
+
+        // Validate profit percentage (required)
+        if (!newInvestorProfitPercentage || newInvestorProfitPercentage === '') {
+            showError('Please enter profit percentage.');
+            return;
+        }
+
+        const profitPercentageValue = parseFloat(newInvestorProfitPercentage);
+        if (Number.isNaN(profitPercentageValue) || profitPercentageValue < 0) {
+            showError('Profit percentage must be a valid non-negative number.');
+            return;
+        }
+
+        const { min, max } = getInvestorRange(newInvestorId);
+        if (profitPercentageValue < min || profitPercentageValue > max) {
+            showError(`Profit percentage must be between ${min}% and ${max}%`);
+            return;
+        }
+
+        const updated = [
+            ...investorAllocations,
+            {
+                investorId: newInvestorId,
+                ownershipPercentage: ownershipPercentageValue.toString(),
+                percentage: ownershipPercentageValue.toString(), // Keep for backward compatibility
+                amount: amountValue.toString(),
+                profitPercentage: profitPercentageValue.toString()
+            }
+        ];
+
+        setInvestorAllocations(updated);
         setNewInvestorId('');
-        setNewInvestorPercentage('');
+        setNewInvestorOwnershipPercentage('');
         setNewInvestorAmount('');
+        setNewInvestorProfitPercentage('');
+        lastNewInvestorInputRef.current = null;
+
+        // Save directly when adding investor
+        saveInvestorAllocations(updated);
     };
 
     useEffect(() => {
-        if (!newInvestorId) {
-            setNewInvestorPercentage('');
-            setNewInvestorAmount('');
-            return;
-        }
-        const { min } = getInvestorRange(newInvestorId);
-        setNewInvestorPercentage(min.toString());
-        if (purchasePrice > 0) {
-            const defaultAmount = Number(((min / 100) * purchasePrice).toFixed(2));
-            setNewInvestorAmount(defaultAmount.toString());
-        } else {
-            setNewInvestorAmount('');
-        }
-    }, [newInvestorId, getInvestorRange, purchasePrice]);
+        setNewInvestorOwnershipPercentage('');
+        setNewInvestorAmount('');
+        setNewInvestorProfitPercentage('');
+        lastNewInvestorInputRef.current = null;
+    }, [newInvestorId]);
 
+    // Auto-calculate amount when ownership percentage changes
     useEffect(() => {
-        if (!newInvestorId || purchasePrice <= 0) {
+        if (!newInvestorId || lastNewInvestorInputRef.current !== 'percentage') {
             return;
         }
-        const percentage = parseFloat(newInvestorPercentage);
-        if (Number.isNaN(percentage)) {
+        const currentFinalPrice = getCurrentFinalPrice();
+        if (currentFinalPrice <= 0) {
+            setNewInvestorAmount('');
             return;
         }
-        if (newInvestorAmount === '') {
-            const defaultAmount = Number(((percentage / 100) * purchasePrice).toFixed(2));
-            setNewInvestorAmount(defaultAmount.toString());
+        const ownershipPercentage = parseFloat(newInvestorOwnershipPercentage);
+        if (Number.isNaN(ownershipPercentage) || ownershipPercentage < 0) {
+            setNewInvestorAmount('');
+            return;
         }
-    }, [newInvestorPercentage, newInvestorId, purchasePrice, newInvestorAmount]);
+        const calculatedAmountValue = (ownershipPercentage / 100) * currentFinalPrice;
+        if (!Number.isFinite(calculatedAmountValue)) {
+            setNewInvestorAmount('');
+            return;
+        }
+        const defaultAmount = Math.round(calculatedAmountValue * 100) / 100;
+        setNewInvestorAmount(defaultAmount.toFixed(2));
+    }, [newInvestorOwnershipPercentage, newInvestorId, getCurrentFinalPrice]);
+
+    // Auto-calculate ownership percentage when amount changes
+    useEffect(() => {
+        if (!newInvestorId || lastNewInvestorInputRef.current !== 'amount') {
+            return;
+        }
+        const currentFinalPrice = getCurrentFinalPrice();
+        if (currentFinalPrice <= 0) {
+            setNewInvestorOwnershipPercentage('');
+            return;
+        }
+        const amount = parseFloat(newInvestorAmount);
+        if (Number.isNaN(amount) || amount < 0) {
+            setNewInvestorOwnershipPercentage('');
+            return;
+        }
+        const calculatedPercentageValue = (amount / currentFinalPrice) * 100;
+        if (!Number.isFinite(calculatedPercentageValue)) {
+            setNewInvestorOwnershipPercentage('');
+            return;
+        }
+        setNewInvestorOwnershipPercentage(calculatedPercentageValue.toFixed(2));
+    }, [newInvestorAmount, newInvestorId, getCurrentFinalPrice]);
 
     const newInvestorStats = newInvestorId ? getInvestorFundingStats(newInvestorId, newInvestorAmount || 0) : null;
 
@@ -1074,46 +1219,13 @@ const InspectionDetail = () => {
         && !purchasing;
 
     const handleSubmitForApproval = async () => {
-        // Check if PO fields need to be filled before submitting for approval
-        const po = lead?.purchaseOrder || {};
-        const needPOFields = !po?.transferCost || !po?.detailing_inspection_cost || !po?.total_investment;
+        // Check if job costing is complete
+        const jobCostingData = lead?.jobCosting || {};
+        const needJobCosting = !jobCostingData.transferCost || !jobCostingData.detailing_inspection_cost;
 
-        if (user?.role === 'admin' && needPOFields) {
-            // Show PO fields modal first
-            const assignedInvestorIds = Array.from(new Set(
-                investorAllocations
-                    .map((allocation) => allocation?.investorId?._id || allocation?.investorId)
-                    .filter(Boolean)
-                    .map((id) => id.toString())
-            ));
-            const singleAssignedInvestorId = assignedInvestorIds.length === 1 ? assignedInvestorIds[0] : '';
-            const resolveInvestorId = (value) => {
-                if (!value) {
-                    return singleAssignedInvestorId || '';
-                }
-                if (typeof value === 'object' && value !== null) {
-                    if ('_id' in value && value._id) {
-                        return value._id.toString();
-                    }
-                }
-                return value.toString();
-            };
-
-            setPOFields({
-                transferCost: po?.transferCost ?? '',
-                detailing_inspection_cost: po?.detailing_inspection_cost ?? '',
-                agent_commision: po?.agent_commision ?? '',
-                car_recovery_cost: po?.car_recovery_cost ?? '',
-                other_charges: po?.other_charges ?? '',
-                total_investment: po?.total_investment ?? '',
-                transferCostInvestor: resolveInvestorId(po?.transferCostInvestor),
-                detailingInspectionCostInvestor: resolveInvestorId(po?.detailingInspectionCostInvestor),
-                agentCommissionInvestor: resolveInvestorId(po?.agentCommissionInvestor),
-                carRecoveryCostInvestor: resolveInvestorId(po?.carRecoveryCostInvestor),
-                otherChargesInvestor: resolveInvestorId(po?.otherChargesInvestor)
-            });
-            setPOFieldsError('');
-            setShowPOFieldsModal(true);
+        if (user?.role === 'admin' && needJobCosting) {
+            showWarning('Please complete the job costing fields (Transfer Cost and Detailing/Inspection Cost) in the Pricing & Job Costings tab before submitting for approval.');
+            setActiveTab('pricing');
             return;
         }
 
@@ -1121,8 +1233,9 @@ const InspectionDetail = () => {
         try {
             await axiosInstance.post(`/purchases/leads/${id}/submit-approval`);
             await fetchLead();
+            showSuccess('Lead submitted for approval successfully!');
         } catch (e) {
-            alert(e?.response?.data?.message || 'Failed to submit for approval');
+            showError(e?.response?.data?.message || 'Failed to submit for approval');
         } finally {
             setSubmittingApproval(false);
         }
@@ -1133,122 +1246,23 @@ const InspectionDetail = () => {
         try {
             await axiosInstance.post(`/purchases/leads/${id}/approve`);
             await fetchLead();
+            showSuccess('Lead approved successfully!');
         } catch (e) {
-            alert(e?.response?.data?.message || 'Failed to approve');
+            showError(e?.response?.data?.message || 'Failed to approve');
         } finally {
             setApproving(false);
         }
     };
 
-    const validatePOFields = () => {
-        if (!poFields.transferCost || !poFields.detailing_inspection_cost) {
-            setPOFieldsError('Transfer cost and detailing / inspection cost are required.');
-            return false;
-        }
-
-        if (!chargeInvestorOptions.length) {
-            setPOFieldsError('Assign at least one investor before saving purchase order details.');
-            return false;
-        }
-
-        if (!poFields.transferCostInvestor) {
-            setPOFieldsError('Select an investor responsible for the transfer cost.');
-            return false;
-        }
-
-        if (!poFields.detailingInspectionCostInvestor) {
-            setPOFieldsError('Select an investor responsible for the detailing / inspection cost.');
-            return false;
-        }
-
-        const optionalCharges = [
-            { amountKey: 'agent_commision', investorKey: 'agentCommissionInvestor', label: 'agent commission' },
-            { amountKey: 'car_recovery_cost', investorKey: 'carRecoveryCostInvestor', label: 'car recovery cost' },
-            { amountKey: 'other_charges', investorKey: 'otherChargesInvestor', label: 'other charges' }
-        ];
-
-        for (const charge of optionalCharges) {
-            const value = poFields[charge.amountKey];
-            const hasAmount = value !== '' && Number(value) > 0;
-            if (hasAmount && !poFields[charge.investorKey]) {
-                setPOFieldsError(`Select an investor responsible for the ${charge.label}.`);
-                return false;
-            }
-        }
-
-        setPOFieldsError('');
-        return true;
-    };
-
-    const buildPurchaseOrderPayload = () => ({
-        transferCost: Number(poFields.transferCost),
-        detailing_inspection_cost: Number(poFields.detailing_inspection_cost),
-        agent_commision: poFields.agent_commision !== '' ? Number(poFields.agent_commision) : 0,
-        car_recovery_cost: poFields.car_recovery_cost !== '' ? Number(poFields.car_recovery_cost) : 0,
-        other_charges: poFields.other_charges !== '' ? Number(poFields.other_charges) : 0,
-        transferCostInvestor: poFields.transferCostInvestor || null,
-        detailingInspectionCostInvestor: poFields.detailingInspectionCostInvestor || null,
-        agentCommissionInvestor: poFields.agentCommissionInvestor || null,
-        carRecoveryCostInvestor: poFields.carRecoveryCostInvestor || null,
-        otherChargesInvestor: poFields.otherChargesInvestor || null
-    });
-
-    const submitPOFieldsAndSubmitForApproval = async () => {
-        if (!validatePOFields()) {
-            return;
-        }
-        setSavingPOFields(true);
-        try {
-            await axiosInstance.put(`/purchases/leads/${id}/purchase-order`, buildPurchaseOrderPayload());
-        } catch (e) {
-            setPOFieldsError(e?.response?.data?.message || 'Failed to save purchase order details.');
-            setSavingPOFields(false);
-            return;
-        }
-
-        closePOFieldsModal();
-        try {
-            // Now submit for approval
-            await axiosInstance.post(`/purchases/leads/${id}/submit-approval`);
-            await fetchLead();
-        } catch (e) {
-            alert(e?.response?.data?.message || 'Failed to submit for approval');
-        } finally {
-            setSavingPOFields(false);
-        }
-    };
-
-    const submitPOFieldsAndApprove = async () => {
-        if (!validatePOFields()) {
-            return;
-        }
-        setSavingPOFields(true);
-        try {
-            await axiosInstance.put(`/purchases/leads/${id}/purchase-order`, buildPurchaseOrderPayload());
-        } catch (e) {
-            setPOFieldsError(e?.response?.data?.message || 'Failed to save purchase order details.');
-            setSavingPOFields(false);
-            return;
-        }
-
-        closePOFieldsModal();
-        try {
-            await axiosInstance.post(`/purchases/leads/${id}/approve`);
-            await fetchLead();
-        } catch (e) {
-            alert(e?.response?.data?.message || 'Failed to approve');
-        } finally {
-            setSavingPOFields(false);
-        }
-    };
 
     const handleDecline = async () => {
         setDeclining(true);
         try {
             await axiosInstance.post(`/purchases/leads/${id}/decline`);
             await fetchLead();
+            showSuccess('Lead declined successfully!');
         } catch (e) {
-            alert(e?.response?.data?.message || 'Failed to decline');
+            showError(e?.response?.data?.message || 'Failed to decline');
         } finally {
             setDeclining(false);
         }
@@ -1265,7 +1279,7 @@ const InspectionDetail = () => {
 
     const confirmPurchase = async () => {
         if (!invoicePaymentDetails.paymentReceivedBy) {
-            alert('Please select who received the payment');
+            showWarning('Please select who received the payment');
             return;
         }
 
@@ -1284,7 +1298,7 @@ const InspectionDetail = () => {
 
         const missingPayment = perInvestorPayload.find((entry) => !entry.modeOfPayment || !entry.paymentReceivedBy);
         if (missingPayment) {
-            alert('Please ensure every investor has a mode of payment and payment received by.');
+            showWarning('Please ensure every investor has a mode of payment and payment received by.');
             return;
         }
 
@@ -1301,11 +1315,14 @@ const InspectionDetail = () => {
                     paymentReceivedBy: ''
                 });
                 setPerInvestorPayments({});
-                alert('Lead converted to vehicle successfully and invoice sent to investor');
+                showSuccess('Lead converted to vehicle successfully and invoice sent to investor');
+                setTimeout(() => {
+                    navigate('/purchases/inventory');
+                }, 1500);
             }
         } catch (error) {
             console.error('Purchase error:', error);
-            alert(error.response?.data?.message || 'Failed to convert lead to vehicle');
+            showError(error.response?.data?.message || 'Failed to convert lead to vehicle');
         } finally {
             setPurchasing(false);
         }
@@ -1326,7 +1343,7 @@ const InspectionDetail = () => {
 
     const handleSavePriceAnalysis = async () => {
         if (!priceAnalysis.minSellingPrice && !priceAnalysis.maxSellingPrice) {
-            alert('Please enter at least Minimum or Maximum Selling Price');
+            showWarning('Please enter at least Minimum or Maximum Selling Price');
             return;
         }
 
@@ -1335,22 +1352,22 @@ const InspectionDetail = () => {
         const finalPrice = parseFloat(priceAnalysis.purchasedFinalPrice);
 
         if (priceAnalysis.minSellingPrice && (isNaN(minPrice) || minPrice <= 0)) {
-            alert('Minimum Selling Price must be a valid positive number');
+            showError('Minimum Selling Price must be a valid positive number');
             return;
         }
 
         if (priceAnalysis.maxSellingPrice && (isNaN(maxPrice) || maxPrice <= 0)) {
-            alert('Maximum Selling Price must be a valid positive number');
+            showError('Maximum Selling Price must be a valid positive number');
             return;
         }
 
         if (priceAnalysis.purchasedFinalPrice && (isNaN(finalPrice) || finalPrice <= 0)) {
-            alert('Purchased Final Price must be a valid positive number');
+            showError('Purchased Final Price must be a valid positive number');
             return;
         }
 
         if (priceAnalysis.minSellingPrice && priceAnalysis.maxSellingPrice && minPrice > maxPrice) {
-            alert('Minimum Selling Price cannot be greater than Maximum Selling Price');
+            showError('Minimum Selling Price cannot be greater than Maximum Selling Price');
             return;
         }
 
@@ -1359,18 +1376,20 @@ const InspectionDetail = () => {
             await axiosInstance.put(`/purchases/leads/${id}/price-analysis`, {
                 minSellingPrice: priceAnalysis.minSellingPrice ? parseFloat(priceAnalysis.minSellingPrice) : null,
                 maxSellingPrice: priceAnalysis.maxSellingPrice ? parseFloat(priceAnalysis.maxSellingPrice) : null,
-                purchasedFinalPrice: priceAnalysis.purchasedFinalPrice ? parseFloat(priceAnalysis.purchasedFinalPrice) : null
+                purchasedFinalPrice: priceAnalysis.purchasedFinalPrice ? parseFloat(priceAnalysis.purchasedFinalPrice) : null,
+                vin: chassisNumber || null,
+                jobCosting: {
+                    transferCost: jobCosting.transferCost ? parseFloat(jobCosting.transferCost) : 0,
+                    detailing_inspection_cost: jobCosting.detailing_inspection_cost ? parseFloat(jobCosting.detailing_inspection_cost) : 0,
+                    agent_commision: jobCosting.agent_commision ? parseFloat(jobCosting.agent_commision) : 0,
+                    car_recovery_cost: jobCosting.car_recovery_cost ? parseFloat(jobCosting.car_recovery_cost) : 0,
+                    other_charges: jobCosting.other_charges ? parseFloat(jobCosting.other_charges) : 0
+                }
             });
-            // Save chassis number (VIN) if changed
-            if ((lead?.vehicleInfo?.vin || '') !== (chassisNumber || '')) {
-                await axiosInstance.put(`/purchases/leads/${id}`, {
-                    vehicleInfo: { vin: chassisNumber || null }
-                });
-            }
-            alert('Price analysis saved successfully!');
+            showSuccess('Price analysis and job costing saved successfully!');
             fetchLead();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to save price analysis');
+            showError(err.response?.data?.message || 'Failed to save price analysis');
         } finally {
             setSavingPrice(false);
         }
@@ -1402,9 +1421,9 @@ const InspectionDetail = () => {
         return colors[priority] || 'text-gray-600';
     };
 
-    const calculateProfit = (sellingPrice, purchasePrice) => {
-        if (!sellingPrice || !purchasePrice) return null;
-        const profit = parseFloat(sellingPrice) - parseFloat(purchasePrice);
+    const calculateProfit = (sellingPrice, purchasedPrice) => {
+        if (!sellingPrice || !purchasedPrice) return null;
+        const profit = parseFloat(sellingPrice) - parseFloat(purchasedPrice);
         const margin = (profit / parseFloat(sellingPrice)) * 100;
         return { profit, margin };
     };
@@ -1419,21 +1438,50 @@ const InspectionDetail = () => {
         );
     }
 
-    if (error) {
-        return (
-            <DashboardLayout title="Inspection Detail">
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-                    {error}
-                </div>
-            </DashboardLayout>
-        );
-    }
-
-    const minProfit = calculateProfit(priceAnalysis.minSellingPrice, priceAnalysis.purchasedFinalPrice);
-    const maxProfit = calculateProfit(priceAnalysis.maxSellingPrice, priceAnalysis.purchasedFinalPrice);
+    const minProfit = calculateProfit(priceAnalysis.minSellingPrice, finalPrice);
+    const maxProfit = calculateProfit(priceAnalysis.maxSellingPrice, finalPrice);
 
     return (
-        <DashboardLayout title={`Inspection ${lead?.leadId}`}>
+        <DashboardLayout title={`Inspection ${lead?.leadId || 'Detail'}`}>
+            {/* Notification */}
+            {notification.show && (
+                <div
+                    className={`mb-4 border-l-4 p-4 rounded-r-lg ${notification.type === 'success' ? 'bg-green-50 border-green-400' :
+                        notification.type === 'warning' ? 'bg-yellow-50 border-yellow-400' :
+                            'bg-red-50 border-red-400'
+                        }`}
+                >
+                    <div className="flex items-center justify-between">
+                        <div className="flex">
+                            {notification.type === 'success' ? (
+                                <svg className="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                            ) : notification.type === 'warning' ? (
+                                <svg className="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                            ) : (
+                                <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                </svg>
+                            )}
+                            <p className={`ml-3 text-sm ${notification.type === 'success' ? 'text-green-700' :
+                                notification.type === 'warning' ? 'text-yellow-700' :
+                                    'text-red-700'
+                                }`}>{notification.message}</p>
+                        </div>
+                        <button
+                            onClick={() => setNotification({ show: false, message: '', type: 'error' })}
+                            className="ml-4 text-gray-400 hover:text-gray-600"
+                        >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            )}
             {/* Header */}
             <div className="mb-6">
                 <div className="flex items-center justify-between mb-4">
@@ -1480,6 +1528,49 @@ const InspectionDetail = () => {
                 </div>
             </div>
 
+            {/* Price Summary Card - Sticky */}
+            {(priceAnalysis.minSellingPrice || priceAnalysis.maxSellingPrice || priceAnalysis.purchasedFinalPrice || finalPrice > 0) && (
+                <div className="sticky top-[10px] z-40 mb-6">
+                    <div className="bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg shadow-lg p-3 text-white">
+                        <h3 className="text-xs font-medium text-indigo-100 mb-2">Price Summary</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                            {priceAnalysis.purchasedFinalPrice && (
+                                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2">
+                                    <div className="text-[10px] text-indigo-100 mb-0.5">Purchase Price</div>
+                                    <div className="text-base font-bold">
+                                        AED {parseFloat(priceAnalysis.purchasedFinalPrice).toLocaleString()}
+                                    </div>
+                                </div>
+                            )}
+                            {finalPrice > 0 && (
+                                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2">
+                                    <div className="text-[10px] text-indigo-100 mb-0.5">Final Price</div>
+                                    <div className="text-base font-bold">
+                                        AED {finalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </div>
+                                </div>
+                            )}
+                            {priceAnalysis.minSellingPrice && (
+                                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2">
+                                    <div className="text-[10px] text-indigo-100 mb-0.5">Min Selling</div>
+                                    <div className="text-base font-bold">
+                                        AED {parseFloat(priceAnalysis.minSellingPrice).toLocaleString()}
+                                    </div>
+                                </div>
+                            )}
+                            {priceAnalysis.maxSellingPrice && (
+                                <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2">
+                                    <div className="text-[10px] text-indigo-100 mb-0.5">Max Selling</div>
+                                    <div className="text-base font-bold">
+                                        AED {parseFloat(priceAnalysis.maxSellingPrice).toLocaleString()}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Main Content */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
@@ -1498,7 +1589,7 @@ const InspectionDetail = () => {
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
-                                        Pricing & Chassis
+                                        Pricing & Job Costings
                                     </div>
                                 </button>
                                 <button
@@ -1673,13 +1764,156 @@ const InspectionDetail = () => {
                                                         placeholder="0.00"
                                                         min="0"
                                                         step="0.01"
+                                                        inputMode="decimal"
                                                     />
                                                 </div>
                                                 <p className="text-xs text-gray-500 mt-1">Final purchase price to calculate profit</p>
                                             </div>
-
-                                            {/* Quick Tip moved below to full width */}
                                         </div>
+                                    </div>
+
+                                    {/* Job Costing Section */}
+                                    <div className="border-t border-gray-200 pt-6">
+                                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Job Costings</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                                    Transfer Cost (RTA) <span className="text-red-500">*</span>
+                                                </label>
+                                                <div className="relative">
+                                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                        <span className="text-gray-500 text-sm font-medium">AED</span>
+                                                    </div>
+                                                    <input
+                                                        type="number"
+                                                        value={jobCosting.transferCost}
+                                                        onChange={(e) => setJobCosting({ ...jobCosting, transferCost: e.target.value })}
+                                                        onWheel={(e) => e.target.blur()}
+                                                        disabled={isSubmittedForApproval()}
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
+                                                            ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
+                                                            : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
+                                                            }`}
+                                                        placeholder="0.00"
+                                                        min="0"
+                                                        step="0.01"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                                    Detailing / Inspection Cost <span className="text-red-500">*</span>
+                                                </label>
+                                                <div className="relative">
+                                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                        <span className="text-gray-500 text-sm font-medium">AED</span>
+                                                    </div>
+                                                    <input
+                                                        type="number"
+                                                        value={jobCosting.detailing_inspection_cost}
+                                                        onChange={(e) => setJobCosting({ ...jobCosting, detailing_inspection_cost: e.target.value })}
+                                                        onWheel={(e) => e.target.blur()}
+                                                        disabled={isSubmittedForApproval()}
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
+                                                            ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
+                                                            : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
+                                                            }`}
+                                                        placeholder="0.00"
+                                                        min="0"
+                                                        step="0.01"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                                    Agent Commission
+                                                </label>
+                                                <div className="relative">
+                                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                        <span className="text-gray-500 text-sm font-medium">AED</span>
+                                                    </div>
+                                                    <input
+                                                        type="number"
+                                                        value={jobCosting.agent_commision}
+                                                        onChange={(e) => setJobCosting({ ...jobCosting, agent_commision: e.target.value })}
+                                                        onWheel={(e) => e.target.blur()}
+                                                        disabled={isSubmittedForApproval()}
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
+                                                            ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
+                                                            : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
+                                                            }`}
+                                                        placeholder="0.00"
+                                                        min="0"
+                                                        step="0.01"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                                    Car Recovery Cost
+                                                </label>
+                                                <div className="relative">
+                                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                        <span className="text-gray-500 text-sm font-medium">AED</span>
+                                                    </div>
+                                                    <input
+                                                        type="number"
+                                                        value={jobCosting.car_recovery_cost}
+                                                        onChange={(e) => setJobCosting({ ...jobCosting, car_recovery_cost: e.target.value })}
+                                                        onWheel={(e) => e.target.blur()}
+                                                        disabled={isSubmittedForApproval()}
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
+                                                            ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
+                                                            : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
+                                                            }`}
+                                                        placeholder="0.00"
+                                                        min="0"
+                                                        step="0.01"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                                    Other Charges
+                                                </label>
+                                                <div className="relative">
+                                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                        <span className="text-gray-500 text-sm font-medium">AED</span>
+                                                    </div>
+                                                    <input
+                                                        type="number"
+                                                        value={jobCosting.other_charges}
+                                                        onChange={(e) => setJobCosting({ ...jobCosting, other_charges: e.target.value })}
+                                                        onWheel={(e) => e.target.blur()}
+                                                        disabled={isSubmittedForApproval()}
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
+                                                            ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
+                                                            : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
+                                                            }`}
+                                                        placeholder="0.00"
+                                                        min="0"
+                                                        step="0.01"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Final Price Display */}
+                                        {priceAnalysis.purchasedFinalPrice && (
+                                            <div className="mt-4 bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-lg p-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <div className="text-xs font-medium text-indigo-600 uppercase tracking-wider mb-1">Final Price</div>
+                                                        <div className="text-2xl font-bold text-indigo-700">
+                                                            AED {finalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </div>
+                                                        <div className="text-xs text-indigo-600 mt-1">
+                                                            Purchase Price ({purchasedFinalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}) + All Job Costings
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Quick Tip - Full Width */}
@@ -1691,14 +1925,15 @@ const InspectionDetail = () => {
                                             <div>
                                                 <div className="text-xs font-medium text-blue-900 mb-1">Quick Tip</div>
                                                 <div className="text-xs text-blue-700">
-                                                    Enter the purchase price to see estimated profit margins and percentages
+                                                    Enter the purchase price and job costings. The final price will be used for investor allocation.
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
 
+
                                     {/* Profit Analysis Cards */}
-                                    {priceAnalysis.purchasedFinalPrice && (priceAnalysis.minSellingPrice || priceAnalysis.maxSellingPrice) && (
+                                    {finalPrice > 0 && (priceAnalysis.minSellingPrice || priceAnalysis.maxSellingPrice) && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {minProfit && (
                                                 <div className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-300 rounded-xl p-6">
@@ -2020,30 +2255,46 @@ const InspectionDetail = () => {
 
                                     {user?.role === 'admin' && (
                                         <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-4">
-                                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                                                <div className="flex flex-col gap-1">
+                                            <div className="flex flex-col gap-4">
+                                                <div className="flex items-center justify-between">
                                                     <label className="text-sm font-medium text-gray-700">Investor Allocations</label>
-                                                    <span className="text-xs text-gray-500">
-                                                        {savingInvestorAllocations ? (
-                                                            <span className="inline-flex items-center gap-1 text-primary-600">
-                                                                <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                                </svg>
-                                                                Saving changes...
-                                                            </span>
-                                                        ) : (
-                                                            'Changes save automatically'
-                                                        )}
-                                                    </span>
-                                                </div>
-                                                <div className="text-sm md:text-right">
-                                                    {purchasePrice > 0 && (
-                                                        <div className="text-xs text-gray-500">Purchased Final Price: <span className='text-sm text-green-500'>AED {formatCurrency(purchasePrice)}</span></div>
+                                                    {savingInvestorAllocations && (
+                                                        <span className="inline-flex items-center gap-1 text-primary-600 text-xs">
+                                                            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                            </svg>
+                                                            Saving changes...
+                                                        </span>
                                                     )}
-                                                    <div className="font-semibold text-gray-700">Total Allocated Amount: AED {formatCurrency(totalAmount)}</div>
-                                                    {purchasePrice > 0 && (
-                                                        <div className="text-gray-600">Remaining Amount Needed: AED {formatCurrency(remainingPurchaseAmount)}</div>
+                                                </div>
+
+                                                {/* Price Summary Cards */}
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                    {finalPrice > 0 && (
+                                                        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 border-2 border-indigo-200 rounded-xl p-4 shadow-sm">
+                                                            <div className="text-[11px] font-semibold text-indigo-600 uppercase tracking-wider mb-2">Final Price</div>
+                                                            <div className="text-xl font-bold text-indigo-900 mb-2">
+                                                                AED {finalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </div>
+                                                            <div className="text-xs text-indigo-600 font-medium">
+                                                                Purchase: AED {purchasedFinalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    <div className={`rounded-xl p-4 border-2 shadow-sm ${totalAmount > 0 ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
+                                                        <div className={`text-[11px] font-semibold uppercase tracking-wider mb-2 ${totalAmount > 0 ? 'text-blue-600' : 'text-gray-500'}`}>Total Allocated</div>
+                                                        <div className={`text-xl font-bold ${totalAmount > 0 ? 'text-blue-900' : 'text-gray-700'}`}>
+                                                            AED {totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                        </div>
+                                                    </div>
+                                                    {finalPrice > 0 && (
+                                                        <div className={`rounded-xl p-4 border-2 shadow-sm ${remainingPurchaseAmount === 0 ? 'bg-green-50 border-green-200' : remainingPurchaseAmount > 0 ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                                                            <div className={`text-[11px] font-semibold uppercase tracking-wider mb-2 ${remainingPurchaseAmount === 0 ? 'text-green-600' : remainingPurchaseAmount > 0 ? 'text-amber-600' : 'text-gray-500'}`}>Remaining Needed</div>
+                                                            <div className={`text-xl font-bold ${remainingPurchaseAmount === 0 ? 'text-green-900' : remainingPurchaseAmount > 0 ? 'text-amber-900' : 'text-gray-700'}`}>
+                                                                AED {remainingPurchaseAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </div>
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>
@@ -2212,53 +2463,56 @@ const InspectionDetail = () => {
 
                                                                     <hr className="border-gray-100" />
 
-                                                                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                                                                        <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
-                                                                            <div className="w-full sm:w-40">
-                                                                                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Percentage</label>
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <input
-                                                                                        type="number"
-                                                                                        min={min}
-                                                                                        max={max}
-                                                                                        step="0.1"
-                                                                                        value={allocation.percentage}
-                                                                                        onChange={(e) => handleAllocationPercentageChange(index, e.target.value)}
-                                                                                        onWheel={(e) => e.target.blur()}
-                                                                                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                                                                                        disabled={isSubmittedForApproval()}
-                                                                                    />
-                                                                                    <span className="text-sm font-medium text-gray-600">%</span>
+                                                                    {/* Allocation Details Card */}
+                                                                    <div className="grid gap-3 text-xs sm:grid-cols-3">
+                                                                        {[
+                                                                            {
+                                                                                label: 'Ownership %',
+                                                                                value: allocation.ownershipPercentage || allocation.percentage || '0',
+                                                                                suffix: '%',
+                                                                                tone: 'default'
+                                                                            },
+                                                                            {
+                                                                                label: 'Amount',
+                                                                                value: allocation.amount || '0',
+                                                                                suffix: 'AED',
+                                                                                tone: 'default'
+                                                                            },
+                                                                            {
+                                                                                label: 'Profit %',
+                                                                                value: allocation.profitPercentage || 'N/A',
+                                                                                suffix: allocation.profitPercentage ? '%' : '',
+                                                                                tone: 'default'
+                                                                            },
+                                                                        ].map((item, tileIndex) => (
+                                                                            <div
+                                                                                key={`${allocation.investorId}-allocation-${tileIndex}`}
+                                                                                className="flex flex-col rounded-xl border px-4 py-3 border-gray-200 bg-gray-50 text-gray-900"
+                                                                            >
+                                                                                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{item.label}</div>
+                                                                                <div className="text-sm font-semibold">
+                                                                                    {item.suffix === 'AED'
+                                                                                        ? `AED ${formatCurrency(item.value)}`
+                                                                                        : item.value === 'N/A'
+                                                                                            ? 'N/A'
+                                                                                            : `${item.value}${item.suffix}`
+                                                                                    }
                                                                                 </div>
                                                                             </div>
-                                                                            <div className="w-full sm:w-48">
-                                                                                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Amount (AED)</label>
-                                                                                <div className="flex items-center gap-2">
-                                                                                    <input
-                                                                                        type="number"
-                                                                                        min="0"
-                                                                                        step="0.01"
-                                                                                        value={allocation.amount || ''}
-                                                                                        onChange={(e) => handleAllocationAmountChange(index, e.target.value)}
-                                                                                        onWheel={(e) => e.target.blur()}
-                                                                                        className="w-full border-2 border-gray-200 rounded-lg px-3 py-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                                                                                        placeholder="0.00"
-                                                                                        disabled={isSubmittedForApproval()}
-                                                                                    />
-                                                                                    <span className="text-sm font-medium text-gray-600">AED</span>
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                        {!isSubmittedForApproval() && (
+                                                                        ))}
+                                                                    </div>
+
+                                                                    {!isSubmittedForApproval() && (
+                                                                        <div className="flex justify-end">
                                                                             <button
                                                                                 type="button"
                                                                                 onClick={() => handleRemoveInvestor(allocation.investorId)}
-                                                                                className="self-start rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:text-red-700"
+                                                                                className="rounded-lg border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition-colors hover:border-red-300 hover:text-red-700"
                                                                             >
                                                                                 Remove
                                                                             </button>
-                                                                        )}
-                                                                    </div>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         );
@@ -2266,59 +2520,121 @@ const InspectionDetail = () => {
                                                 </div>
                                             )}
 
-                                            {!isSubmittedForApproval() && (
-                                                <div className="border-t border-gray-100 pt-4 space-y-4">
-                                                    <div className="flex flex-col lg:flex-row lg:items-end lg:gap-3">
-                                                        <div className="flex-1">
-                                                            <label className="block text-sm font-medium text-gray-700 mb-2">Add Investor</label>
-                                                            <select
-                                                                value={newInvestorId}
-                                                                onChange={(e) => setNewInvestorId(e.target.value)}
-                                                                className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-primary-500 focus:border-primary-500"
-                                                            >
-                                                                <option value="">Select investor...</option>
-                                                                {availableInvestors.map((inv) => (
-                                                                    <option key={inv._id} value={inv._id}>
-                                                                        {inv.name} ({inv.email})
-                                                                    </option>
-                                                                ))}
-                                                            </select>
-                                                        </div>
-                                                        <div className="flex items-end gap-2 mt-3 lg:mt-0">
+                                            {!isSubmittedForApproval() && remainingPurchaseAmount !== 0 && remainingPurchaseAmount !== null && (
+                                                <div className="border-t border-gray-100 pt-6 space-y-6">
+                                                    <div>
+                                                        <h3 className="text-base font-semibold text-gray-900 mb-4">Add New Investor</h3>
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                                                            {/* Investor Dropdown */}
+                                                            <div className="lg:col-span-2">
+                                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                                    Investor <span className="text-red-500">*</span>
+                                                                </label>
+                                                                <select
+                                                                    value={newInvestorId}
+                                                                    onChange={(e) => setNewInvestorId(e.target.value)}
+                                                                    className="w-full border-2 border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                                                                >
+                                                                    <option value="">Select investor...</option>
+                                                                    {availableInvestors.map((inv) => (
+                                                                        <option key={inv._id} value={inv._id}>
+                                                                            {inv.name} ({inv.email})
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+
+                                                            {/* Ownership Percentage */}
                                                             <div>
-                                                                <label className="block text-sm font-medium text-gray-700 mb-2">Percentage</label>
+                                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                                    Ownership % <span className="text-red-500">*</span>
+                                                                </label>
                                                                 <input
                                                                     type="number"
-                                                                    value={newInvestorPercentage}
-                                                                    onChange={(e) => setNewInvestorPercentage(e.target.value.replace(/[^\d.]/g, ''))}
+                                                                    value={newInvestorOwnershipPercentage}
+                                                                    onChange={(e) => handleNewInvestorOwnershipPercentageChange(e.target.value)}
+                                                                    onWheel={(e) => e.target.blur()}
+                                                                    min="0"
+                                                                    max="100"
+                                                                    step="0.1"
+                                                                    className="w-full border-2 border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                                    placeholder="0.0"
+                                                                />
+                                                            </div>
+
+                                                            {/* Amount */}
+                                                            <div>
+                                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                                    Amount (AED) <span className="text-red-500">*</span>
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={newInvestorAmount}
+                                                                    onChange={(e) => handleNewInvestorAmountChange(e.target.value)}
+                                                                    onWheel={(e) => e.target.blur()}
+                                                                    min="0"
+                                                                    step="0.01"
+                                                                    className="w-full border-2 border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                                    placeholder="0.00"
+                                                                />
+                                                            </div>
+
+                                                            {/* Profit Percentage */}
+                                                            <div>
+                                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                                    Profit % <span className="text-red-500">*</span>
+                                                                </label>
+                                                                <input
+                                                                    type="number"
+                                                                    value={newInvestorProfitPercentage}
+                                                                    onChange={(e) => {
+                                                                        const cleanValue = e.target.value.replace(/[^\d.]/g, '');
+                                                                        setNewInvestorProfitPercentage(cleanValue);
+                                                                    }}
                                                                     onWheel={(e) => e.target.blur()}
                                                                     min={newInvestorId ? getInvestorRange(newInvestorId).min : 0}
                                                                     max={newInvestorId ? getInvestorRange(newInvestorId).max : 100}
                                                                     step="0.1"
-                                                                    className="w-28 border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                                                                    placeholder="0"
+                                                                    disabled={!newInvestorId}
+                                                                    className="w-full border-2 border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                                    placeholder="0.0"
                                                                 />
+                                                                {newInvestorId && (
+                                                                    <p className="text-xs text-gray-500 mt-1 whitespace-nowrap">
+                                                                        Range: {getInvestorRange(newInvestorId).min}% - {getInvestorRange(newInvestorId).max}%
+                                                                    </p>
+                                                                )}
                                                             </div>
-                                                            <div>
-                                                                <label className="block text-sm font-medium text-gray-700 mb-2">Amount (AED)</label>
-                                                                <input
-                                                                    type="number"
-                                                                    value={newInvestorAmount}
-                                                                    onChange={(e) => setNewInvestorAmount(e.target.value.replace(/[^\d.]/g, ''))}
-                                                                    onWheel={(e) => e.target.blur()}
-                                                                    min="0"
-                                                                    step="0.01"
-                                                                    className="w-32 border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                                                                    placeholder="0.00"
-                                                                />
-                                                            </div>
+
+                                                        </div>
+
+                                                        {/* Add Button */}
+                                                        <div className="flex justify-end mt-6">
                                                             <button
                                                                 type="button"
                                                                 onClick={handleAddInvestor}
                                                                 disabled={savingInvestorAllocations}
-                                                                className={`inline-flex items-center px-4 py-2 rounded-lg text-white text-sm font-semibold transition-colors ${savingInvestorAllocations ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'}`}
+                                                                className={`inline-flex items-center justify-center px-6 py-2.5 rounded-lg text-sm font-semibold text-white transition-all shadow-sm ${savingInvestorAllocations
+                                                                    ? 'bg-primary-400 cursor-not-allowed'
+                                                                    : 'bg-primary-600 hover:bg-primary-700 hover:shadow-md'
+                                                                    }`}
                                                             >
-                                                                Add
+                                                                {savingInvestorAllocations ? (
+                                                                    <>
+                                                                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                        </svg>
+                                                                        Adding...
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                                                        </svg>
+                                                                        Add Investor
+                                                                    </>
+                                                                )}
                                                             </button>
                                                         </div>
                                                     </div>
@@ -2348,8 +2664,8 @@ const InspectionDetail = () => {
                                                 {user?.role === 'admin' && !isSubmittedForApproval() && investorAllocations.length > 0 && (
                                                     <button
                                                         onClick={handleSubmitForApproval}
-                                                        disabled={submittingApproval}
-                                                        className={`inline-flex items-center px-4 py-2 rounded-lg text-white text-sm font-semibold ${submittingApproval ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'}`}
+                                                        disabled={submittingApproval || remainingPurchaseAmount !== 0}
+                                                        className={`inline-flex items-center px-4 py-2 rounded-lg text-white text-sm font-semibold ${(submittingApproval || remainingPurchaseAmount !== 0) ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'}`}
                                                     >
                                                         {submittingApproval ? 'Submitting...' : 'Submit for Approval'}
                                                     </button>
@@ -2614,7 +2930,7 @@ const InspectionDetail = () => {
                 <div className="space-y-6">
                     {/* Agreement Signed Card */}
                     {isDocuSignCompleted() && !isLeadConverted() && (
-                        <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg shadow-lg p-6 text-white">
+                        <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg shadow-lg p-6 text-white space-y-4">
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="flex-shrink-0 w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">
                                     <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -2630,50 +2946,19 @@ const InspectionDetail = () => {
                                 The investor has signed the Purchase Agreement. You can now proceed with the purchase.
                             </div>
                             {user?.role === 'admin' && (
-                                <button
-                                    onClick={handlePurchase}
-                                    disabled={purchasing}
-                                    className="w-full inline-flex justify-center items-center px-4 py-3 bg-white text-green-700 font-semibold rounded-lg hover:bg-green-50 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m6-5v6a2 2 0 01-2 2H9a2 2 0 01-2-2v-6m8 0V9a2 2 0 00-2-2H9a2 2 0 00-2 2v4.01" />
-                                    </svg>
-                                    {purchasing ? 'Converting...' : 'Purchase Vehicle'}
-                                </button>
+                                <div className="space-y-2">
+                                    <button
+                                        onClick={handlePurchase}
+                                        disabled={purchasing}
+                                        className="w-full inline-flex justify-center items-center px-4 py-3 bg-white text-green-700 font-semibold rounded-lg hover:bg-green-50 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13l2.5 5m6-5v6a2 2 0 01-2 2H9a2 2 0 01-2-2v-6m8 0V9a2 2 0 00-2-2H9a2 2 0 00-2 2v4.01" />
+                                        </svg>
+                                        {purchasing ? 'Converting...' : 'Purchase Vehicle'}
+                                    </button>
+                                </div>
                             )}
-                        </div>
-                    )}
-
-                    {/* Price Summary Card */}
-                    {(priceAnalysis.minSellingPrice || priceAnalysis.maxSellingPrice || priceAnalysis.purchasedFinalPrice) && (
-                        <div className="bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg shadow-lg p-6 text-white">
-                            <h3 className="text-sm font-medium text-indigo-100 mb-4">Price Summary</h3>
-                            <div className="space-y-3">
-                                {priceAnalysis.purchasedFinalPrice && (
-                                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
-                                        <div className="text-xs text-indigo-100 mb-1">Purchase Price</div>
-                                        <div className="text-xl font-bold">
-                                            AED {parseFloat(priceAnalysis.purchasedFinalPrice).toLocaleString()}
-                                        </div>
-                                    </div>
-                                )}
-                                {priceAnalysis.minSellingPrice && (
-                                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
-                                        <div className="text-xs text-indigo-100 mb-1">Min Selling</div>
-                                        <div className="text-xl font-bold">
-                                            AED {parseFloat(priceAnalysis.minSellingPrice).toLocaleString()}
-                                        </div>
-                                    </div>
-                                )}
-                                {priceAnalysis.maxSellingPrice && (
-                                    <div className="bg-white/10 backdrop-blur-sm rounded-lg p-3">
-                                        <div className="text-xs text-indigo-100 mb-1">Max Selling</div>
-                                        <div className="text-xl font-bold">
-                                            AED {parseFloat(priceAnalysis.maxSellingPrice).toLocaleString()}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
                         </div>
                     )}
 
@@ -2772,213 +3057,6 @@ const InspectionDetail = () => {
                 danger={false}
             />
 
-            {showPOFieldsModal && (
-                <div className="fixed inset-0 bg-gray-900 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => !savingPOFields && closePOFieldsModal()}>
-                    <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl" onClick={(e) => e.stopPropagation()}>
-                        <div className="px-6 py-5 border-b border-gray-200">
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-semibold text-gray-900">Purchase Order Details</h3>
-                                {!savingPOFields && (
-                                    <button onClick={closePOFieldsModal} className="text-gray-400 hover:text-gray-600">
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                        </svg>
-                                    </button>
-                                )}
-                            </div>
-                            <p className="mt-1 text-sm text-gray-500">Provide the required details before final approval.</p>
-                        </div>
-                        <div className="px-6 py-5 space-y-5">
-                            {poFieldsError && (
-                                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                                    {poFieldsError}
-                                </div>
-                            )}
-                            {!chargeInvestorOptions.length && (
-                                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-                                    Assign at least one investor before saving purchase order details.
-                                </div>
-                            )}
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Transfer Cost (RTA) <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            onWheel={(e) => e.target.blur()}
-                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                                            value={poFields.transferCost}
-                                            onChange={(e) => setPOFields({ ...poFields, transferCost: e.target.value })}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-gray-600 mb-1">
-                                            Charge Investor <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            value={poFields.transferCostInvestor}
-                                            onChange={(e) => setPOFields({ ...poFields, transferCostInvestor: e.target.value })}
-                                            disabled={savingPOFields || chargeInvestorOptions.length === 0}
-                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-500"
-                                        >
-                                            <option value="">Select investor...</option>
-                                            {chargeInvestorOptions.map((option) => (
-                                                <option key={option.id} value={option.id}>
-                                                    {option.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <p className="mt-1 text-[11px] text-gray-500">Only the selected investor will see this charge in their PO & invoice.</p>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Detailing / Inspection Cost <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            onWheel={(e) => e.target.blur()}
-                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                                            value={poFields.detailing_inspection_cost}
-                                            onChange={(e) => setPOFields({ ...poFields, detailing_inspection_cost: e.target.value })}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-gray-600 mb-1">
-                                            Charge Investor <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            value={poFields.detailingInspectionCostInvestor}
-                                            onChange={(e) => setPOFields({ ...poFields, detailingInspectionCostInvestor: e.target.value })}
-                                            disabled={savingPOFields || chargeInvestorOptions.length === 0}
-                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-500"
-                                        >
-                                            <option value="">Select investor...</option>
-                                            {chargeInvestorOptions.map((option) => (
-                                                <option key={option.id} value={option.id}>
-                                                    {option.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <p className="mt-1 text-[11px] text-gray-500">Investor selection determines who bears this inspection cost.</p>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Agent Commission (Optional)</label>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            onWheel={(e) => e.target.blur()}
-                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                                            value={poFields.agent_commision}
-                                            onChange={(e) => setPOFields({ ...poFields, agent_commision: e.target.value })}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Charge Investor</label>
-                                        <select
-                                            value={poFields.agentCommissionInvestor}
-                                            onChange={(e) => setPOFields({ ...poFields, agentCommissionInvestor: e.target.value })}
-                                            disabled={savingPOFields || chargeInvestorOptions.length === 0}
-                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-500"
-                                        >
-                                            <option value="">Select investor...</option>
-                                            {chargeInvestorOptions.map((option) => (
-                                                <option key={option.id} value={option.id}>
-                                                    {option.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <p className="mt-1 text-[11px] text-gray-500">Required only when a commission amount is added.</p>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Car Recovery Cost (Optional)</label>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            onWheel={(e) => e.target.blur()}
-                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                                            value={poFields.car_recovery_cost}
-                                            onChange={(e) => setPOFields({ ...poFields, car_recovery_cost: e.target.value })}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Charge Investor</label>
-                                        <select
-                                            value={poFields.carRecoveryCostInvestor}
-                                            onChange={(e) => setPOFields({ ...poFields, carRecoveryCostInvestor: e.target.value })}
-                                            disabled={savingPOFields || chargeInvestorOptions.length === 0}
-                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-500"
-                                        >
-                                            <option value="">Select investor...</option>
-                                            {chargeInvestorOptions.map((option) => (
-                                                <option key={option.id} value={option.id}>
-                                                    {option.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Other Charges (Optional)</label>
-                                        <input
-                                            type="number"
-                                            min="0"
-                                            onWheel={(e) => e.target.blur()}
-                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
-                                            value={poFields.other_charges}
-                                            onChange={(e) => setPOFields({ ...poFields, other_charges: e.target.value })}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-gray-600 mb-1">Charge Investor</label>
-                                        <select
-                                            value={poFields.otherChargesInvestor}
-                                            onChange={(e) => setPOFields({ ...poFields, otherChargesInvestor: e.target.value })}
-                                            disabled={savingPOFields || chargeInvestorOptions.length === 0}
-                                            className="w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100 disabled:text-gray-500"
-                                        >
-                                            <option value="">Select investor...</option>
-                                            {chargeInvestorOptions.map((option) => (
-                                                <option key={option.id} value={option.id}>
-                                                    {option.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
-                                {/* Total Investment is auto-calculated on the server */}
-                                {/* Prepared By is auto-detected from the current admin on the server */}
-                            </div>
-                        </div>
-                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end rounded-b-xl">
-                            <button onClick={closePOFieldsModal} disabled={savingPOFields} className={`px-4 py-2 text-sm font-medium rounded-lg ${savingPOFields ? 'bg-white text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}>Cancel</button>
-                            <button
-                                onClick={isSubmittedForApproval() ? submitPOFieldsAndApprove : submitPOFieldsAndSubmitForApproval}
-                                disabled={savingPOFields || chargeInvestorOptions.length === 0}
-                                className={`px-4 py-2 text-sm font-medium rounded-lg ${savingPOFields || chargeInvestorOptions.length === 0 ? 'bg-primary-400 text-white cursor-not-allowed' : 'bg-primary-600 text-white hover:bg-primary-700'}`}
-                            >
-                                {savingPOFields ? 'Saving...' : isSubmittedForApproval() ? 'Save & Approve' : 'Save & Submit for Approval'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* Invoice Payment Details Modal */}
             {showInvoiceModal && (
                 <div
@@ -3040,9 +3118,6 @@ const InspectionDetail = () => {
                                                         Mode of Payment <span className="text-red-500">*</span>
                                                     </th>
                                                     <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                                                        Allocation
-                                                    </th>
-                                                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                                                         Amount (AED)
                                                     </th>
                                                 </tr>
@@ -3092,9 +3167,6 @@ const InspectionDetail = () => {
                                                                     <option value="Cash">Cash</option>
                                                                     <option value="Cheque">Cheque</option>
                                                                 </select>
-                                                            </td>
-                                                            <td className="px-4 py-3 text-xs text-gray-700">
-                                                                {allocation.percentage}%
                                                             </td>
                                                             <td className="px-4 py-3 text-xs text-gray-700">
                                                                 AED {formatCurrency(allocation.amount)}

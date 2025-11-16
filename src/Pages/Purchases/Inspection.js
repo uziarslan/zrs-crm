@@ -354,19 +354,37 @@ const Inspection = () => {
             (lead.priceAnalysis.minSellingPrice || lead.priceAnalysis.maxSellingPrice);
     };
 
-    const isDocumentSigned = (lead) => {
-        const leadDocuSignCompleted = lead?.docuSign?.status === 'completed';
-        const poStatus = lead?.purchaseOrder?.docuSignStatus;
-        const poDocuSignCompleted = poStatus === 'completed' || poStatus === 'signed';
-        return !!(leadDocuSignCompleted || poDocuSignCompleted);
-    };
-
+    // Progress steps mapping (labels describe the next action when not completed):
+    // 1. Pricing & Job Costing
+    // 2. Inspection Report
+    // 3. Submit for Approval (first group)
+    // 4. Final Approval (second group)
     const getProgressInfo = (lead) => {
+        const approvalStatus = lead?.approval?.status;
+        const hasSubmittedForApproval = approvalStatus === 'pending' || approvalStatus === 'approved';
+        const isDualApproved = approvalStatus === 'approved';
+
         const steps = [
-            { key: 'priceAnalysis', label: 'Price Analysis', completed: hasPriceAnalysis(lead) },
-            { key: 'inspectionReport', label: 'Inspection Report', completed: lead?.attachments?.some(d => d.category === 'inspectionReport') },
-            { key: 'dualApproval', label: 'Dual Approval', completed: lead?.approval?.status === 'approved' },
-            { key: 'documentSigned', label: 'Document Signed', completed: isDocumentSigned(lead) }
+            {
+                key: 'priceAnalysis',
+                label: 'Pricing & Job Costing',
+                completed: hasPriceAnalysis(lead)
+            },
+            {
+                key: 'inspectionReport',
+                label: 'Inspection Report',
+                completed: lead?.attachments?.some(d => d.category === 'inspectionReport')
+            },
+            {
+                key: 'firstGroupApproval',
+                label: 'Submit for Approval',
+                completed: !!hasSubmittedForApproval
+            },
+            {
+                key: 'secondGroupApproval',
+                label: 'Final Approval',
+                completed: !!isDualApproved
+            }
         ];
 
         const completedSteps = steps.filter(step => step.completed).length;
