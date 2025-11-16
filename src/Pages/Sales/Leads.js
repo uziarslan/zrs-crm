@@ -96,12 +96,6 @@ const SalesLeads = () => {
         >
           📊 Export Excel
         </button>
-        <button
-          onClick={() => alert('Create Sales Lead - Coming soon')}
-          className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 transition-colors whitespace-nowrap"
-        >
-          + New Lead
-        </button>
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-x-auto">
@@ -109,6 +103,7 @@ const SalesLeads = () => {
           <thead className="bg-gray-50">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lead ID</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Make</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Model</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Year</th>
@@ -117,8 +112,7 @@ const SalesLeads = () => {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Trim</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Region</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">VIN</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asking Price</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Purchased Final Price</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Purchase Price</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
@@ -127,6 +121,17 @@ const SalesLeads = () => {
               <tr key={lead._id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="text-sm font-medium text-primary-600">{lead.leadId}</span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                  <span
+                    className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${
+                      lead.type === 'consignment'
+                        ? 'bg-purple-100 text-purple-800'
+                        : 'bg-blue-100 text-blue-800'
+                    }`}
+                  >
+                    {lead.type === 'consignment' ? 'Consignment' : 'Purchase'}
+                  </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {lead.vehicleInfo?.make || '-'}
@@ -153,10 +158,18 @@ const SalesLeads = () => {
                   {lead.vehicleInfo?.vin || '-'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {lead.vehicleInfo?.askingPrice ? `AED ${lead.vehicleInfo.askingPrice.toLocaleString()}` : '-'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {lead.priceAnalysis?.purchasedFinalPrice ? `AED ${lead.priceAnalysis.purchasedFinalPrice.toLocaleString()}` : '-'}
+                  {(() => {
+                    const purchase = lead.priceAnalysis?.purchasedFinalPrice || 0;
+                    const jc = lead.jobCosting || {};
+                    const jobTotal =
+                      (jc.transferCost || 0) +
+                      (jc.detailing_inspection_cost || 0) +
+                      (jc.agent_commision || 0) +
+                      (jc.car_recovery_cost || 0) +
+                      (jc.other_charges || 0);
+                    const total = purchase + jobTotal;
+                    return total > 0 ? `AED ${total.toLocaleString()}` : '-';
+                  })()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   <Link

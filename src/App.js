@@ -35,7 +35,6 @@ import PurchaseOrders from './Pages/Purchases/PurchaseOrders';
 // Sales Pages
 import SalesLeads from './Pages/Sales/Leads';
 import SalesLeadDetail from './Pages/Sales/LeadDetail';
-import CreateSale from './Pages/Sales/CreateSale';
 import SalesReport from './Pages/Sales/Report';
 import Sold from './Pages/Sales/Sold';
 
@@ -225,14 +224,6 @@ function App() {
                         element={
                             <PrivateRoute roles={['admin', 'manager']}>
                                 <SalesLeadDetail />
-                            </PrivateRoute>
-                        }
-                    />
-                    <Route
-                        path="/sales/create"
-                        element={
-                            <PrivateRoute roles={['admin', 'manager']}>
-                                <CreateSale />
                             </PrivateRoute>
                         }
                     />

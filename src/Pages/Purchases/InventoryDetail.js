@@ -41,6 +41,9 @@ const InventoryDetail = () => {
     const [isDeletingNote, setIsDeletingNote] = useState(false);
     const [updatingChecklistItems, setUpdatingChecklistItems] = useState({});
     const [notification, setNotification] = useState({ show: false, message: '', type: 'success' });
+    const [inspectionDoc, setInspectionDoc] = useState(null);
+    const [inspectionUploading, setInspectionUploading] = useState(false);
+    const [inspectionUploadProgress, setInspectionUploadProgress] = useState(0);
 
     const checklistItems = [
         { key: 'detailing', label: 'Detailing', iconSrc: detailingIcon },
@@ -334,6 +337,65 @@ const InventoryDetail = () => {
         return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
     };
 
+    const handleInspectionFileSelect = (e) => {
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+
+        const file = files[0];
+        const isValidType =
+            file.type === 'application/pdf' ||
+            file.type === 'image/png' ||
+            file.type === 'image/jpeg' ||
+            file.type === 'image/jpg';
+
+        if (!isValidType) {
+            showError('Invalid file type. Only PDF, PNG, JPG are allowed for Inspection Report.');
+            return;
+        }
+
+        if (file.size > 10 * 1024 * 1024) {
+            showError('File is too large. Maximum file size is 10MB.');
+            return;
+        }
+
+        setInspectionDoc(file);
+    };
+
+    const handleInspectionUpload = async () => {
+        if (!inspectionDoc) {
+            showError('Please select an Inspection Report to upload.');
+            return;
+        }
+
+        try {
+            setInspectionUploading(true);
+            setInspectionUploadProgress(0);
+
+            const formData = new FormData();
+            formData.append('inspectionReport', inspectionDoc);
+
+            await axiosInstance.post(`/purchases/leads/${vehicle._id}/documents`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                },
+                onUploadProgress: (progressEvent) => {
+                    if (!progressEvent.total) return;
+                    const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                    setInspectionUploadProgress(progress);
+                }
+            });
+
+            showSuccess('Inspection Report uploaded successfully.');
+            setInspectionDoc(null);
+            setInspectionUploadProgress(0);
+            await fetchVehicle(false);
+        } catch (err) {
+            showError(err.response?.data?.message || 'Failed to upload Inspection Report.');
+        } finally {
+            setInspectionUploading(false);
+        }
+    };
+
     const handleUploadInvoiceEvidence = async (costType, file) => {
         if (!vehicle?.purchaseOrder?._id) {
             alert('Purchase order not found');
@@ -443,6 +505,12 @@ const InventoryDetail = () => {
                 operationalCompleted += 1;
             }
         });
+
+        // For consignment leads, financial evidence is optional and NOT required for readiness.
+        if (vehicle.status === 'consignment') {
+            if (operationalItems.length === 0) return 0;
+            return Math.round((operationalCompleted / operationalItems.length) * 100);
+        }
 
         // Financial checklist based on job costings that have a value and their evidence
         const jobCosting = vehicle.jobCosting || {};
@@ -642,7 +710,9 @@ const InventoryDetail = () => {
     }
 
     const overallProgress = getOverallProgress();
-    const canMarkReady = overallProgress === 100 && (vehicle.status === 'inventory' || vehicle.status === 'in_inventory');
+    const canMarkReady =
+        overallProgress === 100 &&
+        (vehicle.status === 'inventory' || vehicle.status === 'in_inventory' || vehicle.status === 'consignment');
 
     // Progress breakdowns for badges
     const checklist = vehicle.operationalChecklist || {};
@@ -1141,36 +1211,44 @@ const InventoryDetail = () => {
                                 {/* Documents Tab */}
                                 {activeTab === 'documents' && (
                                     <div className="space-y-6">
-                                        <div className="bg-gray-50 rounded-lg p-4">
-                                            {vehicle.attachments && vehicle.attachments.length > 0 ? (
-                                                <div className="space-y-4">
-                                                    {(() => {
-                                                        // Group attachments by category
-                                                        const groupedAttachments = vehicle.attachments.reduce((groups, attachment) => {
-                                                            const category = attachment.category;
-                                                            if (!groups[category]) {
-                                                                groups[category] = [];
-                                                            }
-                                                            groups[category].push(attachment);
-                                                            return groups;
-                                                        }, {});
+                                        {/* Consignment Inspection Report Upload */}
+                                        {vehicle.status === 'consignment' && (
+                                            <div className="bg-gradient-to-r from-indigo-50 to-sky-50 border border-indigo-200 rounded-lg p-5">
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+                                                            <svg className="w-5 h-5 text-indigo-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                            </svg>
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-semibold text-gray-900">Inspection Report</h3>
+                                                            <p className="text-xs text-gray-500">
+                                                                Upload the latest inspection report for this consignment vehicle (PDF or images, max 10MB)
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </div>
 
-                                                        // Category display names
-                                                        const categoryNames = {
-                                                            'inspectionReport': 'Inspection Report',
-                                                            'registrationCard': 'Registration Card',
-                                                            'carPictures': 'Car Pictures',
-                                                            'onlineHistoryCheck': 'Suggested History Check'
-                                                        };
-
-                                                        return Object.entries(groupedAttachments).map(([category, attachments]) => (
-                                                            <div key={category} className="space-y-2">
-                                                                <h4 className="text-sm font-medium text-gray-700 border-b border-gray-200 pb-1">
-                                                                    {categoryNames[category] || category}
-                                                                </h4>
-                                                                <div className="space-y-2">
-                                                                    {attachments.map((attachment, index) => (
-                                                                        <div key={index} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-primary-500 hover:shadow-sm transition-all">
+                                                {/* Existing inspection reports */}
+                                                {vehicle.attachments?.some(a => a.category === 'inspectionReport') && (
+                                                    <div className="mb-4">
+                                                        <h4 className="text-xs font-semibold text-gray-700 mb-2">Existing Inspection Reports</h4>
+                                                        <div className="space-y-2">
+                                                            {vehicle.attachments
+                                                                .filter(a => a.category === 'inspectionReport')
+                                                                .map((attachment, index) => {
+                                                                    const keyId =
+                                                                        attachment._id ||
+                                                                        attachment.url ||
+                                                                        `${attachment.fileName}_${attachment.category}_${index}`;
+                                                                    const isViewing = viewingDocumentId === keyId;
+                                                                    const isDownloading = downloadingDocumentId === keyId;
+                                                                    return (
+                                                                        <div
+                                                                            key={keyId}
+                                                                            className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-primary-500 hover:shadow-sm transition-all"
+                                                                        >
                                                                             <div className="flex items-center gap-3 flex-1 min-w-0">
                                                                                 <div className="flex-shrink-0 w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
                                                                                     {attachment.fileType === 'application/pdf' ? (
@@ -1185,24 +1263,28 @@ const InventoryDetail = () => {
                                                                                 </div>
                                                                                 <div className="flex-1 min-w-0">
                                                                                     <div className="text-sm font-medium text-gray-900 truncate">
-                                                                                        {attachment.fileName || 'Document'}
+                                                                                        {attachment.fileName || 'Inspection Report'}
                                                                                     </div>
                                                                                     <div className="text-xs text-gray-500">
-                                                                                        {attachment.category} • {attachment.fileSize ? formatFileSize(attachment.fileSize) : 'Unknown size'}
+                                                                                        {formatFileSize(attachment.fileSize)} • Uploaded Inspection Report
                                                                                     </div>
                                                                                 </div>
                                                                             </div>
                                                                             <div className="flex items-center gap-1 ml-3">
                                                                                 <button
                                                                                     onClick={() => handleViewDocument(attachment)}
-                                                                                    disabled={viewingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`) || downloadingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`)}
+                                                                                    disabled={isViewing || isDownloading}
                                                                                     className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                                                     title="View"
                                                                                 >
-                                                                                    {viewingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`) ? (
+                                                                                    {isViewing ? (
                                                                                         <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                                            <path
+                                                                                                className="opacity-75"
+                                                                                                fill="currentColor"
+                                                                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                                                            />
                                                                                         </svg>
                                                                                     ) : (
                                                                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1213,14 +1295,18 @@ const InventoryDetail = () => {
                                                                                 </button>
                                                                                 <button
                                                                                     onClick={() => handleDownloadDocument(attachment)}
-                                                                                    disabled={viewingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`) || downloadingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`)}
+                                                                                    disabled={isViewing || isDownloading}
                                                                                     className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                                                     title="Download"
                                                                                 >
-                                                                                    {downloadingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`) ? (
+                                                                                    {isDownloading ? (
                                                                                         <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                                            <path
+                                                                                                className="opacity-75"
+                                                                                                fill="currentColor"
+                                                                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                                                            />
                                                                                         </svg>
                                                                                     ) : (
                                                                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1230,21 +1316,203 @@ const InventoryDetail = () => {
                                                                                 </button>
                                                                             </div>
                                                                         </div>
-                                                                    ))}
-                                                                </div>
+                                                                    );
+                                                                })}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Selected file for upload */}
+                                                {inspectionDoc && (
+                                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                                                        <div className="text-xs font-medium text-blue-700 mb-1">Selected for upload:</div>
+                                                        <div className="flex items-center justify-between bg-white rounded px-2 py-1.5">
+                                                            <span className="text-xs text-gray-900 truncate flex-1">{inspectionDoc.name}</span>
+                                                            {!inspectionUploading && (
+                                                                <button
+                                                                    onClick={() => setInspectionDoc(null)}
+                                                                    className="ml-2 text-red-600 hover:text-red-800"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                                    </svg>
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Upload control */}
+                                                <div className="space-y-3">
+                                                    <input
+                                                        type="file"
+                                                        id="inspection-report-file"
+                                                        accept=".pdf,.png,.jpg,.jpeg"
+                                                        onChange={handleInspectionFileSelect}
+                                                        className="hidden"
+                                                        disabled={inspectionUploading}
+                                                    />
+                                                    <label
+                                                        htmlFor="inspection-report-file"
+                                                        className={`flex items-center justify-center gap-2 cursor-pointer px-4 py-2.5 border-2 border-dashed rounded-lg transition-all ${inspectionUploading
+                                                            ? 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-50'
+                                                            : 'border-indigo-300 bg-indigo-50 hover:border-indigo-400 hover:bg-indigo-100'
+                                                            }`}
+                                                    >
+                                                        <svg className="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                                        </svg>
+                                                        <span className="text-sm font-medium text-indigo-800">
+                                                            {inspectionDoc ? 'Change File' : 'Choose Inspection Report'}
+                                                        </span>
+                                                        <span className="text-xs text-indigo-600">
+                                                            (Max 10MB • PDF/PNG/JPG)
+                                                        </span>
+                                                    </label>
+
+                                                    {inspectionUploading && (
+                                                        <div className="bg-blue-50 border border-blue-300 rounded-lg p-3">
+                                                            <div className="flex items-center gap-3 mb-2">
+                                                                <svg className="animate-spin h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24">
+                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                </svg>
+                                                                <span className="text-xs font-semibold text-blue-900">
+                                                                    Uploading inspection report... {inspectionUploadProgress}%
+                                                                </span>
                                                             </div>
-                                                        ));
-                                                    })()}
+                                                            <div className="w-full bg-blue-200 rounded-full h-2">
+                                                                <div
+                                                                    className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                                                                    style={{ width: `${inspectionUploadProgress}%` }}
+                                                                ></div>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {inspectionDoc && !inspectionUploading && (
+                                                        <button
+                                                            onClick={handleInspectionUpload}
+                                                            className="w-full inline-flex justify-center items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-all"
+                                                        >
+                                                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                                            </svg>
+                                                            Upload Inspection Report
+                                                        </button>
+                                                    )}
                                                 </div>
-                                            ) : (
-                                                <div className="text-center py-12">
-                                                    <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                    </svg>
-                                                    <p className="text-gray-500 text-sm">No documents available</p>
-                                                </div>
-                                            )}
-                                        </div>
+                                            </div>
+                                        )}
+
+                                        {vehicle.status !== 'consignment' && (
+                                            <div className="bg-gray-50 rounded-lg p-4">
+                                                {vehicle.attachments && vehicle.attachments.length > 0 ? (
+                                                    <div className="space-y-4">
+                                                        {(() => {
+                                                            // Group attachments by category
+                                                            const groupedAttachments = vehicle.attachments.reduce((groups, attachment) => {
+                                                                const category = attachment.category;
+                                                                if (!groups[category]) {
+                                                                    groups[category] = [];
+                                                                }
+                                                                groups[category].push(attachment);
+                                                                return groups;
+                                                            }, {});
+
+                                                            // Category display names
+                                                            const categoryNames = {
+                                                                'inspectionReport': 'Inspection Report',
+                                                                'registrationCard': 'Registration Card',
+                                                                'carPictures': 'Car Pictures',
+                                                                'onlineHistoryCheck': 'Suggested History Check'
+                                                            };
+
+                                                            return Object.entries(groupedAttachments).map(([category, attachments]) => (
+                                                                <div key={category} className="space-y-2">
+                                                                    <h4 className="text-sm font-medium text-gray-700 border-b border-gray-200 pb-1">
+                                                                        {categoryNames[category] || category}
+                                                                    </h4>
+                                                                    <div className="space-y-2">
+                                                                        {attachments.map((attachment, index) => (
+                                                                            <div key={index} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-primary-500 hover:shadow-sm transition-all">
+                                                                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                                                    <div className="flex-shrink-0 w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
+                                                                                        {attachment.fileType === 'application/pdf' ? (
+                                                                                            <svg className="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                                                            </svg>
+                                                                                        ) : (
+                                                                                            <svg className="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                                                            </svg>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    <div className="flex-1 min-w-0">
+                                                                                        <div className="text-sm font-medium text-gray-900 truncate">
+                                                                                            {attachment.fileName || 'Document'}
+                                                                                        </div>
+                                                                                        <div className="text-xs text-gray-500">
+                                                                                            {attachment.category} • {attachment.fileSize ? formatFileSize(attachment.fileSize) : 'Unknown size'}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div className="flex items-center gap-1 ml-3">
+                                                                                    <button
+                                                                                        onClick={() => handleViewDocument(attachment)}
+                                                                                        disabled={viewingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`) || downloadingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`)}
+                                                                                        className="p-2 text-primary-600 hover:bg-primary-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                        title="View"
+                                                                                    >
+                                                                                        {viewingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`) ? (
+                                                                                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                            </svg>
+                                                                                        ) : (
+                                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                                                            </svg>
+                                                                                        )}
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() => handleDownloadDocument(attachment)}
+                                                                                        disabled={viewingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`) || downloadingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`)}
+                                                                                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                                        title="Download"
+                                                                                    >
+                                                                                        {downloadingDocumentId === (attachment._id || attachment.url || `${attachment.fileName}_${attachment.category}`) ? (
+                                                                                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                            </svg>
+                                                                                        ) : (
+                                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                                                            </svg>
+                                                                                        )}
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            ));
+                                                        })()}
+                                                    </div>
+                                                ) : (
+                                                    vehicle.status !== 'consignment' && (
+                                                        <div className="text-center py-12">
+                                                            <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                            </svg>
+                                                            <p className="text-gray-500 text-sm">No documents available</p>
+                                                        </div>
+                                                    )
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 

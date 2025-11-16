@@ -131,8 +131,13 @@ const Inventory = () => {
     });
 
     // Financial checklist items (job costing evidence)
-    const financialTotal = vehicle.financialChecklist?.totalItems || 0;
-    const financialCompleted = vehicle.financialChecklist?.completedItems || 0;
+    // For consignment leads, financial evidence is optional and NOT required for readiness.
+    let financialTotal = 0;
+    let financialCompleted = 0;
+    if (vehicle.status !== 'consignment') {
+      financialTotal = vehicle.financialChecklist?.totalItems || 0;
+      financialCompleted = vehicle.financialChecklist?.completedItems || 0;
+    }
 
     const totalItems = operationalItems.length + financialTotal;
     const totalCompleted = operationalCompleted + financialCompleted;
@@ -365,9 +370,12 @@ const Inventory = () => {
                         if (isBulkMoving) return;
 
                         const selected = vehicles.filter(v => selectedVehicles.includes(v._id));
-                        // Consider only inventory / in_inventory vehicles for move to sales
+                        // Consider only inventory / in_inventory / consignment vehicles for move to sales
                         const inventoryVehicles = selected.filter(
-                          v => v.status === 'inventory' || v.status === 'in_inventory'
+                          v =>
+                            v.status === 'inventory' ||
+                            v.status === 'in_inventory' ||
+                            v.status === 'consignment'
                         );
 
                         if (inventoryVehicles.length === 0) {
@@ -529,7 +537,7 @@ const Inventory = () => {
                             <span className="text-sm text-gray-600 font-medium">{getChecklistProgress(vehicle)}%</span>
                           </div>
                           {getChecklistProgress(vehicle) === 100 &&
-                            (vehicle.status === 'inventory' || vehicle.status === 'in_inventory') && (
+                            (vehicle.status === 'inventory' || vehicle.status === 'in_inventory' || vehicle.status === 'consignment') && (
                               <button
                                 onClick={() => handleMarkAsReady(vehicle)}
                                 className="mt-2 inline-flex items-center px-2.5 py-1 bg-green-600 hover:bg-green-700 text-white text-[11px] font-semibold rounded-md transition-colors"
@@ -586,14 +594,6 @@ const Inventory = () => {
                           >
                             View Details
                           </button>
-                          {isChecklistComplete(vehicle.operationalChecklist) && vehicle.status === 'in_inventory' && (
-                            <button
-                              onClick={() => handleMarkAsReady(vehicle)}
-                              className="px-3 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors"
-                            >
-                              Mark Ready
-                            </button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -681,7 +681,10 @@ const Inventory = () => {
 
                     const selected = vehicles.filter(v => selectedVehicles.includes(v._id));
                     const inventoryVehicles = selected.filter(
-                      v => v.status === 'inventory' || v.status === 'in_inventory'
+                      v =>
+                        v.status === 'inventory' ||
+                        v.status === 'in_inventory' ||
+                        v.status === 'consignment'
                     );
                     const readyVehicles = inventoryVehicles.filter(v => getChecklistProgress(v) === 100);
 
