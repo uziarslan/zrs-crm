@@ -22,7 +22,7 @@ const NegotiationDetail = () => {
     const [documents, setDocuments] = useState({
         registrationCard: null,
         carPictures: [],
-        onlineHistoryCheck: null
+        onlineHistoryCheck: []
     });
     const [editingNoteId, setEditingNoteId] = useState(null);
     const [editingNoteContent, setEditingNoteContent] = useState('');
@@ -40,7 +40,7 @@ const NegotiationDetail = () => {
     const documentCategories = [
         { key: 'registrationCard', label: 'Registration Card', accept: '.pdf,.png,.jpg,.jpeg', multiple: false, IconComponent: RegistrationCardIcon },
         { key: 'carPictures', label: 'Car Pictures', accept: '.png,.jpg,.jpeg', multiple: true, IconComponent: CarPicturesIcon },
-        { key: 'onlineHistoryCheck', label: 'Online History Check', accept: '.pdf', multiple: false, IconComponent: OnlineHistoryCheckIcon }
+        { key: 'onlineHistoryCheck', label: 'Online History Check', accept: '.pdf', multiple: true, IconComponent: OnlineHistoryCheckIcon }
     ];
 
     useEffect(() => {
@@ -83,7 +83,7 @@ const NegotiationDetail = () => {
             return isValid;
         });
 
-        if (category === 'carPictures') {
+        if (category === 'carPictures' || category === 'onlineHistoryCheck') {
             setDocuments({
                 ...documents,
                 [category]: [...documents[category], ...validSizeFiles]
@@ -97,9 +97,9 @@ const NegotiationDetail = () => {
     };
 
     const removeFile = (category, index = null) => {
-        if (category === 'carPictures' && index !== null) {
-            const newPictures = documents.carPictures.filter((_, i) => i !== index);
-            setDocuments({ ...documents, carPictures: newPictures });
+        if ((category === 'carPictures' || category === 'onlineHistoryCheck') && index !== null) {
+            const newFiles = documents[category].filter((_, i) => i !== index);
+            setDocuments({ ...documents, [category]: newFiles });
         } else {
             setDocuments({ ...documents, [category]: null });
         }
@@ -108,7 +108,7 @@ const NegotiationDetail = () => {
     const handleUpload = async () => {
         const hasFiles = documents.registrationCard ||
             documents.carPictures.length > 0 ||
-            documents.onlineHistoryCheck;
+            documents.onlineHistoryCheck.length > 0;
 
         if (!hasFiles) {
             alert('Please select at least one file to upload');
@@ -124,9 +124,9 @@ const NegotiationDetail = () => {
             if (documents.registrationCard) {
                 formData.append('registrationCard', documents.registrationCard);
             }
-            if (documents.onlineHistoryCheck) {
-                formData.append('onlineHistoryCheck', documents.onlineHistoryCheck);
-            }
+            documents.onlineHistoryCheck.forEach((file) => {
+                formData.append('onlineHistoryCheck', file);
+            });
             documents.carPictures.forEach((file) => {
                 formData.append('carPictures', file);
             });
@@ -145,7 +145,7 @@ const NegotiationDetail = () => {
             setDocuments({
                 registrationCard: null,
                 carPictures: [],
-                onlineHistoryCheck: null
+                onlineHistoryCheck: []
             });
             setUploadProgress(0);
             fetchLead();
@@ -640,10 +640,10 @@ const NegotiationDetail = () => {
                                                                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                                                                     </svg>
                                                                                 ) : (
-                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                                                </svg>
+                                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                                                    </svg>
                                                                                 )}
                                                                             </button>
                                                                             <button
@@ -658,9 +658,9 @@ const NegotiationDetail = () => {
                                                                                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                                                                     </svg>
                                                                                 ) : (
-                                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                                                                </svg>
+                                                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                                                                    </svg>
                                                                                 )}
                                                                             </button>
                                                                             {user?.role === 'admin' && (
@@ -776,7 +776,7 @@ const NegotiationDetail = () => {
                                     )}
 
                                     {/* Upload Button */}
-                                    {(documents.registrationCard || documents.carPictures.length > 0 || documents.onlineHistoryCheck) && !uploading && (
+                                    {(documents.registrationCard || documents.carPictures.length > 0 || documents.onlineHistoryCheck.length > 0) && !uploading && (
                                         <button
                                             onClick={handleUpload}
                                             className="w-full inline-flex justify-center items-center px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all"
@@ -784,7 +784,7 @@ const NegotiationDetail = () => {
                                             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                                             </svg>
-                                            Upload Documents ({Object.values(documents).flat().filter(Boolean).length})
+                                            Upload Documents ({[documents.registrationCard, ...documents.carPictures, ...documents.onlineHistoryCheck].filter(Boolean).length})
                                         </button>
                                     )}
                                 </div>

@@ -64,7 +64,7 @@ const CarDetailsPrint = () => {
             </div>
 
             {/* Main Content */}
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-4xl mx-auto print-container">
                 {/* Header */}
                 <div className="border-b-4 border-gray-800 pb-4 mb-6">
                     <h1 className="text-4xl font-bold text-gray-900 mb-2">
@@ -150,8 +150,94 @@ const CarDetailsPrint = () => {
                     </div>
                 </div>
 
+                {/* Price Analysis */}
+                {(lead?.priceAnalysis?.minSellingPrice || lead?.priceAnalysis?.maxSellingPrice || lead?.priceAnalysis?.purchasedFinalPrice) && (
+                    <div className="mb-8">
+                        <h2 className="text-2xl font-bold text-gray-900 mb-4 border-b-2 border-gray-300 pb-2">
+                            Price Analysis
+                        </h2>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            {lead?.priceAnalysis?.minSellingPrice && (
+                                <div>
+                                    <p className="text-sm text-gray-600 mb-1">Min Selling Price</p>
+                                    <p className="text-lg font-semibold text-gray-900">
+                                        AED {lead.priceAnalysis.minSellingPrice.toLocaleString()}
+                                    </p>
+                                </div>
+                            )}
+                            {lead?.priceAnalysis?.maxSellingPrice && (
+                                <div>
+                                    <p className="text-sm text-gray-600 mb-1">Max Selling Price</p>
+                                    <p className="text-lg font-semibold text-gray-900">
+                                        AED {lead.priceAnalysis.maxSellingPrice.toLocaleString()}
+                                    </p>
+                                </div>
+                            )}
+                            {lead?.priceAnalysis?.purchasedFinalPrice && (
+                                <div>
+                                    <p className="text-sm text-gray-600 mb-1">Purchased Final Price</p>
+                                    <p className="text-lg font-semibold text-gray-900">
+                                        AED {lead.priceAnalysis.purchasedFinalPrice.toLocaleString()}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {/* Job Costing */}
+                {(lead?.jobCosting?.transferCost || lead?.jobCosting?.detailing_inspection_cost || lead?.jobCosting?.agent_commision || lead?.jobCosting?.car_recovery_cost || lead?.jobCosting?.other_charges) && (
+                    <div className="mb-8">
+                        <h2 className="text-2xl font-bold text-gray-900 mb-4 border-b-2 border-gray-300 pb-2">
+                            Job Costing
+                        </h2>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            {lead?.jobCosting?.transferCost !== undefined && lead?.jobCosting?.transferCost !== null && (
+                                <div>
+                                    <p className="text-sm text-gray-600 mb-1">Transfer Cost</p>
+                                    <p className="text-lg font-semibold text-gray-900">
+                                        AED {lead.jobCosting.transferCost.toLocaleString()}
+                                    </p>
+                                </div>
+                            )}
+                            {lead?.jobCosting?.detailing_inspection_cost !== undefined && lead?.jobCosting?.detailing_inspection_cost !== null && (
+                                <div>
+                                    <p className="text-sm text-gray-600 mb-1">Detailing & Inspection Cost</p>
+                                    <p className="text-lg font-semibold text-gray-900">
+                                        AED {lead.jobCosting.detailing_inspection_cost.toLocaleString()}
+                                    </p>
+                                </div>
+                            )}
+                            {lead?.jobCosting?.agent_commision !== undefined && lead?.jobCosting?.agent_commision !== null && (
+                                <div>
+                                    <p className="text-sm text-gray-600 mb-1">Agent Commission</p>
+                                    <p className="text-lg font-semibold text-gray-900">
+                                        AED {lead.jobCosting.agent_commision.toLocaleString()}
+                                    </p>
+                                </div>
+                            )}
+                            {lead?.jobCosting?.car_recovery_cost !== undefined && lead?.jobCosting?.car_recovery_cost !== null && (
+                                <div>
+                                    <p className="text-sm text-gray-600 mb-1">Car Recovery Cost</p>
+                                    <p className="text-lg font-semibold text-gray-900">
+                                        AED {lead.jobCosting.car_recovery_cost.toLocaleString()}
+                                    </p>
+                                </div>
+                            )}
+                            {lead?.jobCosting?.other_charges !== undefined && lead?.jobCosting?.other_charges !== null && (
+                                <div>
+                                    <p className="text-sm text-gray-600 mb-1">Other Charges</p>
+                                    <p className="text-lg font-semibold text-gray-900">
+                                        AED {lead.jobCosting.other_charges.toLocaleString()}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {/* Footer */}
-                <div className="mt-8 pt-4 border-t-2 border-gray-300 text-center text-sm text-gray-600">
+                <div className="mt-8 pt-4 border-t-2 border-gray-300 text-center text-sm text-gray-600 print-footer">
                     <p>Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}</p>
                 </div>
             </div>
@@ -168,6 +254,7 @@ const CarDetailsPrint = () => {
                         padding: 0;
                         -webkit-print-color-adjust: exact;
                         print-color-adjust: exact;
+                        font-size: 12px !important;
                     }
                     body * {
                         visibility: visible;
@@ -181,12 +268,97 @@ const CarDetailsPrint = () => {
                     /* Add padding to content when printing since page margins are 0 */
                     .max-w-4xl {
                         padding: 1rem;
+                        padding-bottom: 3rem !important;
+                    }
+                    /* Reduce all text sizes and line heights when printing */
+                    h1 {
+                        font-size: 1.75rem !important;
+                        line-height: 1.2 !important;
+                    }
+                    h2 {
+                        font-size: 1.25rem !important;
+                        line-height: 1.3 !important;
+                    }
+                    p {
+                        font-size: 0.875rem !important;
+                        line-height: 1.4 !important;
+                    }
+                    .text-4xl {
+                        font-size: 1.75rem !important;
+                        line-height: 1.2 !important;
+                    }
+                    .text-2xl {
+                        font-size: 1.25rem !important;
+                        line-height: 1.3 !important;
+                    }
+                    .text-xl {
+                        font-size: 1rem !important;
+                        line-height: 1.35 !important;
+                    }
+                    .text-lg {
+                        font-size: 0.875rem !important;
+                        line-height: 1.4 !important;
+                    }
+                    .text-sm {
+                        font-size: 0.75rem !important;
+                        line-height: 1.4 !important;
+                    }
+                    /* Reduce spacing for all elements */
+                    div {
+                        line-height: 1.4 !important;
+                    }
+                    /* Reduce margins and padding for better spacing */
+                    .mb-8 {
+                        margin-bottom: 1rem !important;
+                    }
+                    .mb-4 {
+                        margin-bottom: 0.5rem !important;
+                    }
+                    .mb-2 {
+                        margin-bottom: 0.25rem !important;
+                    }
+                    .mb-1 {
+                        margin-bottom: 0.125rem !important;
+                    }
+                    .mt-8 {
+                        margin-top: 1rem !important;
+                    }
+                    .pb-4 {
+                        padding-bottom: 0.5rem !important;
+                    }
+                    .pb-2 {
+                        padding-bottom: 0.25rem !important;
+                    }
+                    .pt-4 {
+                        padding-top: 0.5rem !important;
+                    }
+                    .gap-4 {
+                        gap: 0.5rem !important;
+                    }
+                    .gap-3 {
+                        gap: 0.375rem !important;
+                    }
+                    /* Force 3 columns for Price Analysis and Job Costing when printing */
+                    .grid.grid-cols-2 {
+                        grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
                     }
                     /* Ensure car images stay small when printing */
                     div.grid.grid-cols-4 img,
                     div.grid.grid-cols-6 img {
                         max-width: 150px !important;
                         max-height: 150px !important;
+                    }
+                    /* Position footer at bottom of page when printing */
+                    .print-footer {
+                        position: fixed !important;
+                        bottom: 0 !important;
+                        left: 0 !important;
+                        right: 0 !important;
+                        width: 100% !important;
+                        margin-top: 0 !important;
+                        padding: 0.5rem 1rem !important;
+                        background: white !important;
+                        border-top: 2px solid #e5e7eb !important;
                     }
                 }
             `}</style>
