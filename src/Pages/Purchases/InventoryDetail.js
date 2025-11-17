@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
@@ -44,6 +44,16 @@ const InventoryDetail = () => {
     const [inspectionDoc, setInspectionDoc] = useState(null);
     const [inspectionUploading, setInspectionUploading] = useState(false);
     const [inspectionUploadProgress, setInspectionUploadProgress] = useState(0);
+    const [showAgreementModal, setShowAgreementModal] = useState(false);
+    const [generatingAgreement, setGeneratingAgreement] = useState(false);
+    const [agreementError, setAgreementError] = useState('');
+    const [agreementForm, setAgreementForm] = useState({
+        ownerAddress: '',
+        ownerContact: '',
+        ownerEmiratesIdOrPassport: '',
+        agreedAmount: '',
+        duration: '30-45 days'
+    });
 
     const checklistItems = [
         { key: 'detailing', label: 'Detailing', iconSrc: detailingIcon },
@@ -53,6 +63,37 @@ const InventoryDetail = () => {
         { key: 'onlineAds', label: 'Online Ads', iconSrc: onlineAdsIcon },
         { key: 'instagram', label: 'Instagram', iconSrc: instagramIcon }
     ];
+
+    const ownerDefaults = useMemo(() => {
+        if (!vehicle) {
+            return {
+                name: '',
+                contact: '',
+                address: '',
+                idDocument: ''
+            };
+        }
+        return {
+            name: vehicle.ownerInfo?.name || vehicle.contactInfo?.name || '',
+            contact: vehicle.ownerInfo?.contactNumber || vehicle.contactInfo?.phone || '',
+            address: vehicle.ownerInfo?.address || '',
+            idDocument: vehicle.ownerInfo?.emiratesIdOrPassport || vehicle.contactInfo?.passportOrEmiratesId || ''
+        };
+    }, [vehicle]);
+
+    const missingOwnerFields = useMemo(() => {
+        const fields = [];
+        if (!ownerDefaults.address) {
+            fields.push({ key: 'ownerAddress', label: 'Owner Address' });
+        }
+        if (!ownerDefaults.idDocument) {
+            fields.push({ key: 'ownerEmiratesIdOrPassport', label: 'Owner Emirates ID / Passport' });
+        }
+        if (!ownerDefaults.contact) {
+            fields.push({ key: 'ownerContact', label: 'Owner Contact Number' });
+        }
+        return fields;
+    }, [ownerDefaults]);
 
     useEffect(() => {
         fetchVehicle();
@@ -81,6 +122,75 @@ const InventoryDetail = () => {
         setTimeout(() => {
             setNotification({ show: false, message: '', type: 'error' });
         }, 5000);
+    };
+
+    const openAgreementModal = () => {
+        if (!vehicle) return;
+        setAgreementError('');
+        setAgreementForm({
+            ownerAddress: ownerDefaults.address,
+            ownerContact: ownerDefaults.contact,
+            ownerEmiratesIdOrPassport: ownerDefaults.idDocument,
+            agreedAmount: vehicle.purchasePrice || '',
+            duration: '30-45 days'
+        });
+        setShowAgreementModal(true);
+    };
+
+    const closeAgreementModal = () => {
+        if (generatingAgreement) return;
+        setShowAgreementModal(false);
+    };
+
+    const handleAgreementInputChange = (event) => {
+        const { name, value } = event.target;
+        setAgreementForm((prev) => ({
+            ...prev,
+            [name]: value
+        }));
+    };
+
+    const handleGenerateAgreement = async (event) => {
+        event.preventDefault();
+        if (!vehicle) return;
+        setAgreementError('');
+        setGeneratingAgreement(true);
+        try {
+            const normalizedAmount = agreementForm.agreedAmount !== '' && agreementForm.agreedAmount !== null
+                ? Number(agreementForm.agreedAmount)
+                : undefined;
+            const payload = {
+                ownerAddress: agreementForm.ownerAddress || undefined,
+                ownerContact: agreementForm.ownerContact || undefined,
+                ownerEmiratesIdOrPassport: agreementForm.ownerEmiratesIdOrPassport || undefined,
+                agreedAmount: normalizedAmount ?? vehicle.purchasePrice,
+                duration: agreementForm.duration
+            };
+            const response = await axiosInstance.post(`/consignment-agreement/${vehicle._id}`, payload);
+            if (response.data?.downloadUrl) {
+                const downloadResponse = await axiosInstance.get(response.data.downloadUrl, {
+                    responseType: 'blob'
+                });
+                const blob = new Blob([downloadResponse.data], { type: 'application/pdf' });
+                const blobUrl = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download =
+                    response.data?.agreement?.pdfFileName ||
+                    `Consignment_Agreement_${vehicle.leadId || vehicle.vehicleId || 'agreement'}.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+            }
+            showSuccess('Consignment agreement generated successfully.');
+            setShowAgreementModal(false);
+            await fetchVehicle(false);
+        } catch (err) {
+            setAgreementError(err.response?.data?.message || 'Failed to generate agreement.');
+        } finally {
+            setGeneratingAgreement(false);
+        }
     };
 
     const fetchVehicle = async (showLoading = true) => {
@@ -818,6 +928,38 @@ const InventoryDetail = () => {
                     </div>
                 </div>
 
+                {vehicle.status === 'consignment' && (
+                    <div className="bg-white rounded-lg shadow-sm border border-purple-200 p-5 mt-6">
+                        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                            <div>
+                                <p className="text-xs uppercase tracking-wide text-purple-600 font-semibold mb-1">
+                                    Consignment Agreement
+                                </p>
+                                <h2 className="text-lg font-semibold text-gray-900">Generate the agreement PDF</h2>
+                                <p className="text-sm text-gray-600">
+                                    Prefill lead details and add any missing owner info before creating the official agreement.
+                                </p>
+                                {missingOwnerFields.length > 0 ? (
+                                    <p className="text-xs text-amber-700 mt-2">
+                                        Missing info needed: {missingOwnerFields.map((field) => field.label).join(', ')}
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-green-700 mt-2">
+                                        Owner details are complete. You can generate the agreement now.
+                                    </p>
+                                )}
+                            </div>
+                            <button
+                                onClick={openAgreementModal}
+                                className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-purple-600 text-white font-semibold text-sm shadow hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={generatingAgreement}
+                            >
+                                {generatingAgreement ? 'Preparing...' : 'Generate Consignment Agreement'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2">
                         {/* Tab Navigation */}
@@ -923,20 +1065,26 @@ const InventoryDetail = () => {
                                                 <div className="space-y-3">
                                                     <div className="flex justify-between">
                                                         <span className="text-gray-600">Name:</span>
-                                                        <span className="font-medium">{vehicle.contactInfo?.name || 'N/A'}</span>
+                                                        <span className="font-medium">{ownerDefaults.name || 'N/A'}</span>
                                                     </div>
                                                     <div className="flex justify-between">
                                                         <span className="text-gray-600">Phone:</span>
-                                                        <span className="font-medium">{vehicle.contactInfo?.phone || 'N/A'}</span>
+                                                        <span className="font-medium">{ownerDefaults.contact || 'N/A'}</span>
                                                     </div>
                                                     <div className="flex justify-between">
                                                         <span className="text-gray-600">Email:</span>
                                                         <span className="font-medium break-all">{vehicle.contactInfo?.email || 'N/A'}</span>
                                                     </div>
-                                                    {vehicle.contactInfo?.passportOrEmiratesId && (
+                                                    {ownerDefaults.idDocument && (
                                                         <div className="flex justify-between">
                                                             <span className="text-gray-600">Passport/Emirates ID:</span>
-                                                            <span className="font-medium">{vehicle.contactInfo.passportOrEmiratesId}</span>
+                                                            <span className="font-medium">{ownerDefaults.idDocument}</span>
+                                                        </div>
+                                                    )}
+                                                    {ownerDefaults.address && (
+                                                        <div className="flex justify-between">
+                                                            <span className="text-gray-600">Address:</span>
+                                                            <span className="font-medium text-right max-w-[220px]">{ownerDefaults.address}</span>
                                                         </div>
                                                     )}
                                                     {vehicle.contactInfo?.preferredContact && (
@@ -2132,6 +2280,149 @@ const InventoryDetail = () => {
                     </div>
                 </div>
             </div>
+
+            {showAgreementModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 px-4">
+                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                            <div>
+                                <p className="text-xs uppercase tracking-wide text-purple-600 font-semibold">Consignment Agreement</p>
+                                <h3 className="text-lg font-semibold text-gray-900">Generate PDF</h3>
+                            </div>
+                            <button
+                                onClick={closeAgreementModal}
+                                className="p-2 rounded-full hover:bg-gray-100 text-gray-500"
+                                type="button"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleGenerateAgreement} className="px-6 py-5 space-y-5 max-h-[75vh] overflow-y-auto">
+                            <div className="bg-gray-50 rounded-lg p-4">
+                                <h4 className="text-sm font-semibold text-gray-900 mb-3">Owner Summary</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <p className="text-gray-500">Name</p>
+                                        <p className="font-medium text-gray-900">{ownerDefaults.name || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-500">Contact Number</p>
+                                        <p className="font-medium text-gray-900">{ownerDefaults.contact || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-500">Emirates ID / Passport</p>
+                                        <p className="font-medium text-gray-900">{ownerDefaults.idDocument || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-500">Address</p>
+                                        <p className="font-medium text-gray-900">{ownerDefaults.address || 'Not captured'}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {missingOwnerFields.length > 0 && (
+                                <div className="space-y-4">
+                                    <p className="text-sm font-semibold text-gray-900">Fill in missing owner details</p>
+                                    {missingOwnerFields.map((field) => (
+                                        <div key={field.key}>
+                                            <label className="block text-xs font-semibold text-gray-600 mb-1" htmlFor={field.key}>
+                                                {field.label}
+                                            </label>
+                                            {field.key === 'ownerAddress' ? (
+                                                <textarea
+                                                    id={field.key}
+                                                    name={field.key}
+                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                                    rows="3"
+                                                    value={agreementForm[field.key] || ''}
+                                                    onChange={handleAgreementInputChange}
+                                                    required
+                                                />
+                                            ) : (
+                                                <input
+                                                    id={field.key}
+                                                    name={field.key}
+                                                    type="text"
+                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                                    value={agreementForm[field.key] || ''}
+                                                    onChange={handleAgreementInputChange}
+                                                    required
+                                                />
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1" htmlFor="agreedAmount">
+                                    Consignment Agreed Amount (AED)
+                                </label>
+                                <input
+                                    id="agreedAmount"
+                                    name="agreedAmount"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    onWheel={(event) => event.target.blur()}
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 number-input-no-spin"
+                                    value={agreementForm.agreedAmount}
+                                    onChange={handleAgreementInputChange}
+                                    required
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Defaults to the purchased final price (AED {vehicle?.purchasePrice?.toLocaleString() || '0'})
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1" htmlFor="duration">
+                                    Consignment Duration
+                                </label>
+                                <select
+                                    id="duration"
+                                    name="duration"
+                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                                    value={agreementForm.duration}
+                                    onChange={handleAgreementInputChange}
+                                >
+                                    <option value="30-45 days">30–45 days</option>
+                                    <option value="30 days">30 days</option>
+                                    <option value="45 days">45 days</option>
+                                    <option value="60 days">60 days</option>
+                                </select>
+                            </div>
+
+                            {agreementError && (
+                                <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                                    {agreementError}
+                                </div>
+                            )}
+
+                            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                                <button
+                                    type="button"
+                                    onClick={closeAgreementModal}
+                                    className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                    disabled={generatingAgreement}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-4 py-2 rounded-lg bg-purple-600 text-white font-semibold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={generatingAgreement}
+                                >
+                                    {generatingAgreement ? 'Generating...' : 'Generate PDF'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             <ConfirmDialog
                 isOpen={showDeleteEvidenceModal}

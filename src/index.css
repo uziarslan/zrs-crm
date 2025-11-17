@@ -69,3 +69,13 @@ code {
         text-wrap: balance;
     }
 }
+
+.number-input-no-spin::-webkit-outer-spin-button,
+.number-input-no-spin::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.number-input-no-spin {
+    -moz-appearance: textfield;
+}
