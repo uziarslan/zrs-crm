@@ -40,7 +40,7 @@ const NegotiationDetail = () => {
     const documentCategories = [
         { key: 'registrationCard', label: 'Registration Card', accept: '.pdf,.png,.jpg,.jpeg', multiple: false, IconComponent: RegistrationCardIcon },
         { key: 'carPictures', label: 'Car Pictures', accept: '.png,.jpg,.jpeg', multiple: true, IconComponent: CarPicturesIcon },
-        { key: 'onlineHistoryCheck', label: 'Online History Check', accept: '.pdf', multiple: true, IconComponent: OnlineHistoryCheckIcon }
+        { key: 'onlineHistoryCheck', label: 'Online History Check', accept: '.pdf,.png,.jpg,.jpeg', multiple: true, IconComponent: OnlineHistoryCheckIcon }
     ];
 
     useEffect(() => {
