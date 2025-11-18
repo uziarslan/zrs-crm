@@ -4,27 +4,27 @@ import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
 
 const Sold = () => {
-  const [sales, setSales] = useState([]);
+  const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filters, setFilters] = useState({ search: '' });
 
   useEffect(() => {
-    fetchSoldSales();
+    fetchSoldLeads();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
 
-  const fetchSoldSales = async () => {
+  const fetchSoldLeads = async () => {
     try {
       const params = new URLSearchParams();
-      params.append('status', 'completed');
+      params.append('status', 'sold');
       if (filters.search) params.append('search', filters.search);
 
-      const response = await axiosInstance.get(`/sales?${params}`);
-      setSales(response.data.data || []);
+      const response = await axiosInstance.get(`/purchases/leads?${params}`);
+      setLeads(response.data.data || []);
       setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to fetch sold sales');
+      setError(err.response?.data?.message || 'Failed to fetch sold leads');
     } finally {
       setLoading(false);
     }
@@ -33,20 +33,20 @@ const Sold = () => {
   const exportSales = async () => {
     try {
       const params = new URLSearchParams();
-      params.append('status', 'completed');
+      params.append('status', 'sold');
 
-      const response = await axiosInstance.get(`/export/sales?${params}`, {
+      const response = await axiosInstance.get(`/export/leads?${params}`, {
         responseType: 'blob'
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `sold_sales_${Date.now()}.xlsx`);
+      link.setAttribute('download', `sold_vehicles_${Date.now()}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
     } catch (err) {
-      alert('Failed to export sales');
+      alert('Failed to export sold vehicles');
     }
   };
 
@@ -95,7 +95,7 @@ const Sold = () => {
           </div>
           <input
             type="text"
-            placeholder="Search sold sales..."
+            placeholder="Search sold vehicles..."
             value={filters.search}
             onChange={(e) => setFilters({ ...filters, search: e.target.value })}
             className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -119,7 +119,10 @@ const Sold = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Sale ID
+                  Lead ID
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Type
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Vehicle
@@ -131,7 +134,10 @@ const Sold = () => {
                   Selling Price
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Profit
+                  ZRS Profit
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                  Other Party Profit
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                   Sold Date
@@ -142,73 +148,116 @@ const Sold = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {sales.map((sale) => (
-                <tr key={sale._id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm font-bold text-primary-600">{sale.saleId}</span>
-                  </td>
-                  <td className="px-6 py-4">
-                    {sale.vehicleId ? (
+              {leads.map((lead) => {
+                const sellInvoice = lead.sellInvoice || {};
+                const zrsProfit = Number(sellInvoice.zrsProfit || 0);
+                const isConsignment = lead.type === 'consignment';
+
+                // For consignment: use ownerProfit, for purchase: sum investor profits
+                let otherPartyProfit = 0;
+                if (isConsignment) {
+                  otherPartyProfit = Number(sellInvoice.ownerProfit || 0);
+                } else {
+                  const investorBreakdown = sellInvoice.investorBreakdown || [];
+                  otherPartyProfit = investorBreakdown.reduce((sum, inv) => {
+                    const profit = Number(inv.profitAmount || 0);
+                    return sum + profit;
+                  }, 0);
+                }
+
+                const sellingPrice = lead.soldPrice || sellInvoice.sellingPrice || 0;
+                const purchasePrice = lead.priceAnalysis?.purchasedFinalPrice || 0;
+                const zrsProfitPercentage = purchasePrice > 0 ? ((zrsProfit / purchasePrice) * 100) : 0;
+                const otherPartyProfitPercentage = purchasePrice > 0 ? ((otherPartyProfit / purchasePrice) * 100) : 0;
+                const soldDate = sellInvoice.createdAt || lead.updatedAt || lead.createdAt;
+
+                return (
+                  <tr key={lead._id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="text-sm font-bold text-primary-600">{lead.leadId}</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${lead.type === 'purchase'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-purple-100 text-purple-800'
+                        }`}>
+                        {lead.type === 'purchase' ? 'Purchase' : 'Consignment'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      {lead.vehicleInfo ? (
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {lead.vehicleInfo.make} {lead.vehicleInfo.model}
+                          </div>
+                          <div className="text-xs text-gray-500">{lead.vehicleInfo.year}</div>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">N/A</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
-                          {sale.vehicleId.make} {sale.vehicleId.model}
+                          {lead.sellOrder?.customerName || lead.contactInfo?.name || 'N/A'}
                         </div>
-                        <div className="text-xs text-gray-500">{sale.vehicleId.year}</div>
+                        <div className="text-xs text-gray-500">
+                          {lead.sellOrder?.customerContact || lead.contactInfo?.phone || ''}
+                        </div>
                       </div>
-                    ) : (
-                      <span className="text-sm text-gray-400">N/A</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{sale.customerInfo?.name || 'N/A'}</div>
-                      <div className="text-xs text-gray-500">{sale.customerInfo?.phone || ''}</div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-semibold text-gray-900">
-                      AED {sale.sellingPrice?.toLocaleString() || 'N/A'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-semibold text-green-600">
-                      AED {sale.profit?.toLocaleString() || 'N/A'}
-                    </div>
-                    {sale.profitPercentage && (
-                      <div className="text-xs text-gray-500">{sale.profitPercentage.toFixed(2)}%</div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
-                      {sale.soldAt ? new Date(sale.soldAt).toLocaleDateString() : 
-                       sale.createdAt ? new Date(sale.createdAt).toLocaleDateString() : 'N/A'}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <Link
-                      to={`/sales/leads/${sale._id}`}
-                      className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-all"
-                    >
-                      View
-                      <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </Link>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-semibold text-gray-900">
+                        AED {sellingPrice.toLocaleString() || 'N/A'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-semibold text-blue-600">
+                        AED {zrsProfit.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      {zrsProfitPercentage !== 0 && (
+                        <div className="text-xs text-gray-500">{zrsProfitPercentage.toFixed(2)}%</div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-semibold text-green-600">
+                        AED {otherPartyProfit.toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      {otherPartyProfitPercentage !== 0 && (
+                        <div className="text-xs text-gray-500">{otherPartyProfitPercentage.toFixed(2)}%</div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {soldDate ? new Date(soldDate).toLocaleDateString() : 'N/A'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <Link
+                        to={`/sales/leads/${lead._id}`}
+                        className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-all"
+                      >
+                        View
+                        <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
 
-        {sales.length === 0 && (
+        {leads.length === 0 && (
           <div className="text-center py-16">
             <svg className="w-20 h-20 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <h3 className="text-lg font-medium text-gray-900 mb-1">No sold sales</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-1">No sold vehicles</h3>
             <p className="text-sm text-gray-500">
-              {filters.search ? 'Try adjusting your search' : 'Sold sales will appear here when sales are completed'}
+              {filters.search ? 'Try adjusting your search' : 'Sold vehicles will appear here when Sell Invoices are generated'}
             </p>
           </div>
         )}
