@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
@@ -9,6 +9,7 @@ const CreateLead = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [managers, setManagers] = useState([]);
+  const [notification, setNotification] = useState({ show: false, type: 'success', message: '' });
   const [formData, setFormData] = useState({
     type: 'purchase', // Required by backend validation
     source: 'website',
@@ -47,6 +48,16 @@ const CreateLead = () => {
     }
   };
 
+  const showNotification = useCallback((type, message) => {
+    setNotification({ show: true, type, message });
+    setTimeout(() => {
+      setNotification({ show: false, type, message: '' });
+    }, 5000);
+  }, []);
+
+  const showSuccess = useCallback((message) => showNotification('success', message), [showNotification]);
+  const showError = useCallback((message) => showNotification('error', message), [showNotification]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -59,15 +70,15 @@ const CreateLead = () => {
       }
 
       await axiosInstance.post('/purchases/leads', submitData);
-      alert('Lead created successfully!');
+      showSuccess('Lead created successfully!');
       navigate('/purchases/leads');
     } catch (err) {
       // Show detailed validation errors if available
       if (err.response?.data?.errors && Array.isArray(err.response.data.errors)) {
         const errorMessages = err.response.data.errors.map(e => e.msg || e).join('\n');
-        alert(`Validation errors:\n${errorMessages}`);
+        showError(`Validation errors:\n${errorMessages}`);
       } else {
-        alert(err.response?.data?.message || 'Failed to create lead');
+        showError(err.response?.data?.message || 'Failed to create lead');
       }
       console.error('Create lead error:', err.response?.data);
     } finally {
@@ -92,6 +103,32 @@ const CreateLead = () => {
   return (
     <DashboardLayout>
       <div className="max-w-5xl mx-auto">
+        {notification.show && (
+          <div
+            className={`mb-4 border-l-4 p-4 rounded-r-lg ${notification.type === 'success'
+              ? 'bg-green-50 border-green-400'
+              : 'bg-red-50 border-red-400'
+              }`}
+          >
+            <div className="flex items-center justify-between">
+              <p
+                className={`text-sm ${notification.type === 'success' ? 'text-green-700' : 'text-red-700'
+                  }`}
+              >
+                {notification.message}
+              </p>
+              <button
+                type="button"
+                onClick={() => setNotification({ show: false, type: 'success', message: '' })}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
         <div className="mb-6 bg-gradient-to-r from-primary-600 to-primary-700 rounded-xl p-6 text-white shadow">
           <h1 className="text-2xl font-bold">Create New Purchase Lead</h1>
           <p className="text-primary-100 mt-1 text-sm">Provide customer and vehicle details to register a new lead.</p>
@@ -235,7 +272,7 @@ const CreateLead = () => {
                   value={formData.vehicleInfo.region}
                   onChange={(e) => handleChange('vehicleInfo', 'region', e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="e.g., Dubai, Abu Dhabi"
+                  placeholder="e.g., GCC, Non GCC, American"
                 />
               </div>
               <div className="md:col-span-2">

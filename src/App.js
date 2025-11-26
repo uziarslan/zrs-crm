@@ -37,6 +37,7 @@ import SalesLeads from './Pages/Sales/Leads';
 import SalesLeadDetail from './Pages/Sales/LeadDetail';
 import SalesReport from './Pages/Sales/Report';
 import Sold from './Pages/Sales/Sold';
+import SoldDetails from './Pages/Sales/SoldDetails';
 
 // Investor Pages
 import InvestorDashboard from './Pages/Investor/Dashboard';
@@ -216,6 +217,14 @@ function App() {
                         element={
                             <PrivateRoute roles={['admin', 'manager']}>
                                 <Sold />
+                            </PrivateRoute>
+                        }
+                    />
+                    <Route
+                        path="/sales/sold/:id"
+                        element={
+                            <PrivateRoute roles={['admin', 'manager']}>
+                                <SoldDetails />
                             </PrivateRoute>
                         }
                     />

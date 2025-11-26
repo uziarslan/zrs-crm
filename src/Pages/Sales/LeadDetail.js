@@ -4,7 +4,7 @@ import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
 import ConfirmDialog from '../../Components/ConfirmDialog';
 
-const SalesLeadDetail = () => {
+const SalesLeadDetail = ({ isSoldView = false }) => {
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -31,6 +31,9 @@ const SalesLeadDetail = () => {
   const [sellInvoiceSubmitting, setSellInvoiceSubmitting] = useState(false);
   const [sellInvoiceDownloading, setSellInvoiceDownloading] = useState(false);
   const [notification, setNotification] = useState({ show: false, type: 'success', message: '' });
+
+  const backPath = isSoldView ? '/sales/sold' : '/sales/leads';
+  const pageTitle = isSoldView ? 'Sold Lead Detail' : 'Sales Lead Detail';
   const [sellOrderForm, setSellOrderForm] = useState({
     customerName: '',
     customerContact: '',
@@ -451,7 +454,7 @@ const SalesLeadDetail = () => {
 
   if (loading) {
     return (
-      <DashboardLayout title="Sales Lead Detail">
+      <DashboardLayout title={pageTitle}>
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
         </div>
@@ -461,17 +464,17 @@ const SalesLeadDetail = () => {
 
   if (error) {
     return (
-      <DashboardLayout title="Sales Lead Detail">
+      <DashboardLayout title={pageTitle}>
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
             <div className="text-red-500 text-6xl mb-4">⚠️</div>
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Error</h2>
             <p className="text-gray-600 mb-4">{error}</p>
             <button
-              onClick={() => navigate('/sales/leads')}
+              onClick={() => navigate(backPath)}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
             >
-              Back to Sales Leads
+              {isSoldView ? 'Back to Sold' : 'Back to Sales Leads'}
             </button>
           </div>
         </div>
@@ -481,17 +484,17 @@ const SalesLeadDetail = () => {
 
   if (!lead) {
     return (
-      <DashboardLayout title="Sales Lead Detail">
+      <DashboardLayout title={pageTitle}>
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
             <div className="text-gray-400 text-6xl mb-4">📄</div>
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Lead Not Found</h2>
             <p className="text-gray-600 mb-4">The requested sales lead could not be found.</p>
             <button
-              onClick={() => navigate('/sales/leads')}
+              onClick={() => navigate(backPath)}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
             >
-              Back to Sales Leads
+              {isSoldView ? 'Back to Sold' : 'Back to Sales Leads'}
             </button>
           </div>
         </div>
@@ -538,7 +541,7 @@ const SalesLeadDetail = () => {
   const purchasedPriceValue = (purchasedBaseValue || 0) + jobCostingTotalValue;
 
   return (
-    <DashboardLayout title={`Sales Lead ${lead.leadId || ''}`}>
+    <DashboardLayout title={`${isSoldView ? 'Sold Lead' : 'Sales Lead'} ${lead.leadId || ''}`}>
       <div className="space-y-6">
         {notification.show && (
           <div
@@ -603,93 +606,95 @@ const SalesLeadDetail = () => {
             </div>
             <div className="flex flex-wrap items-center justify-end gap-3">
               <button
-                onClick={() => navigate('/sales/leads')}
+                onClick={() => navigate(backPath)}
                 className="px-4 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-colors"
               >
-                ← Back to Sales Leads
+                ← {isSoldView ? 'Back to Sold' : 'Back to Sales Leads'}
               </button>
             </div>
           </div>
         </div>
 
-        {/* Sell Order / Invoice Section */}
-        <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-5">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-blue-600 font-semibold mb-1">
-                Sales Order / Invoice
-              </p>
-              {!hasSellOrder ? (
-                <>
-                  <h2 className="text-lg font-semibold text-gray-900">Generate the Sales Order PDF</h2>
-                  <p className="text-sm text-gray-600">
-                    Fill in customer and transaction details to create the official Sales Order document.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h2 className="text-lg font-semibold text-gray-900">Sales Order Generated</h2>
-                  <p className="text-sm text-gray-600">
-                    Order Number: <span className="font-semibold">{sellOrderDetails?.salesOrderNumber}</span>
-                  </p>
-                </>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              {!hasSellOrder && (
-                <button
-                  type="button"
-                  onClick={openSellOrderModal}
-                  className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-blue-600 text-white font-semibold text-sm shadow hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={sellOrderSubmitting}
-                >
-                  {sellOrderSubmitting ? 'Preparing...' : 'Generate Sell Order'}
-                </button>
-              )}
-              {hasSellOrder && (
-                <>
+        {/* Sell Order / Invoice Section (only for Sales tab, not Sold view) */}
+        {!isSoldView && (
+          <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-5">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-blue-600 font-semibold mb-1">
+                  Sales Order / Invoice
+                </p>
+                {!hasSellOrder ? (
+                  <>
+                    <h2 className="text-lg font-semibold text-gray-900">Generate the Sales Order PDF</h2>
+                    <p className="text-sm text-gray-600">
+                      Fill in customer and transaction details to create the official Sales Order document.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-lg font-semibold text-gray-900">Sales Order Generated</h2>
+                    <p className="text-sm text-gray-600">
+                      Order Number: <span className="font-semibold">{sellOrderDetails?.salesOrderNumber}</span>
+                    </p>
+                  </>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {!hasSellOrder && (
                   <button
                     type="button"
-                    onClick={handleDownloadSellOrder}
-                    disabled={sellOrderDownloading}
-                    className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-blue-600 text-white font-semibold text-sm shadow hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    onClick={openSellOrderModal}
+                    className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-blue-600 text-white font-semibold text-sm shadow hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={sellOrderSubmitting}
                   >
-                    {sellOrderDownloading ? 'Downloading…' : 'Download Sell Order'}
+                    {sellOrderSubmitting ? 'Preparing...' : 'Generate Sell Order'}
                   </button>
-                  {!hasSellInvoice && (
+                )}
+                {hasSellOrder && (
+                  <>
                     <button
                       type="button"
-                      onClick={handleGenerateSellInvoice}
-                      className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-green-600 text-white font-semibold text-sm shadow hover:bg-green-700 transition-colors"
+                      onClick={handleDownloadSellOrder}
+                      disabled={sellOrderDownloading}
+                      className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-blue-600 text-white font-semibold text-sm shadow hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                      Generate Sell Invoice
+                      {sellOrderDownloading ? 'Downloading…' : 'Download Sell Order'}
                     </button>
-                  )}
-                  {hasSellInvoice && (
-                    <button
-                      type="button"
-                      onClick={handleDownloadSellInvoice}
-                      disabled={sellInvoiceDownloading}
-                      className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-green-600 text-white font-semibold text-sm shadow hover:bg-green-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {sellInvoiceDownloading ? 'Downloading…' : 'Download Sell Invoice'}
-                    </button>
-                  )}
-                  {!hasSellInvoice && (
-                    <button
-                      type="button"
-                      onClick={handleCancelSellOrder}
-                      disabled={sellOrderCancelling}
-                      className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-red-500 text-white font-semibold text-sm shadow hover:bg-red-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {sellOrderCancelling ? 'Cancelling…' : 'Cancel Sell Order'}
-                    </button>
-                  )}
-                </>
-              )}
+                    {!hasSellInvoice && (
+                      <button
+                        type="button"
+                        onClick={handleGenerateSellInvoice}
+                        className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-green-600 text-white font-semibold text-sm shadow hover:bg-green-700 transition-colors"
+                      >
+                        Generate Sell Invoice
+                      </button>
+                    )}
+                    {hasSellInvoice && (
+                      <button
+                        type="button"
+                        onClick={handleDownloadSellInvoice}
+                        disabled={sellInvoiceDownloading}
+                        className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-green-600 text-white font-semibold text-sm shadow hover:bg-green-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {sellInvoiceDownloading ? 'Downloading…' : 'Download Sell Invoice'}
+                      </button>
+                    )}
+                    {!hasSellInvoice && (
+                      <button
+                        type="button"
+                        onClick={handleCancelSellOrder}
+                        disabled={sellOrderCancelling}
+                        className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-red-500 text-white font-semibold text-sm shadow hover:bg-red-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {sellOrderCancelling ? 'Cancelling…' : 'Cancel Sell Order'}
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
@@ -790,32 +795,47 @@ const SalesLeadDetail = () => {
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                             <div>
                               <p className="text-xs uppercase tracking-wider text-blue-100 font-medium mb-1">
-                                Sales Order No.
+                                {isSoldView && lead.sellInvoice ? 'Sell Invoice No.' : 'Sales Order No.'}
                               </p>
-                              <p className="text-2xl font-bold text-white">{sellOrderDetails.salesOrderNumber}</p>
+                              <p className="text-2xl font-bold text-white">
+                                {isSoldView && lead.sellInvoice
+                                  ? lead.sellInvoice.invoiceNumber
+                                  : sellOrderDetails.salesOrderNumber}
+                              </p>
                             </div>
                             <div className="text-right">
                               <p className="text-xs uppercase tracking-wider text-blue-100 font-medium mb-1">
-                                Generated On
+                                {isSoldView && lead.sellInvoice ? 'Final Payment On' : 'Generated On'}
                               </p>
                               <p className="text-sm font-semibold text-white">
-                                {sellOrderDetails.date
-                                  ? new Date(sellOrderDetails.date).toLocaleString('en-GB', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    second: '2-digit'
-                                  })
-                                  : new Date(sellOrderDetails.createdAt || Date.now()).toLocaleString('en-GB', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    second: '2-digit'
-                                  })}
+                                {isSoldView && lead.sellInvoice
+                                  ? (lead.sellInvoice.dateOfFinalPayment
+                                      ? new Date(lead.sellInvoice.dateOfFinalPayment).toLocaleString('en-GB', {
+                                          day: '2-digit',
+                                          month: '2-digit',
+                                          year: 'numeric',
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                          second: '2-digit'
+                                        })
+                                      : 'N/A')
+                                  : (sellOrderDetails.date
+                                      ? new Date(sellOrderDetails.date).toLocaleString('en-GB', {
+                                          day: '2-digit',
+                                          month: '2-digit',
+                                          year: 'numeric',
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                          second: '2-digit'
+                                        })
+                                      : new Date(sellOrderDetails.createdAt || Date.now()).toLocaleString('en-GB', {
+                                          day: '2-digit',
+                                          month: '2-digit',
+                                          year: 'numeric',
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                          second: '2-digit'
+                                        }))}
                               </p>
                             </div>
                           </div>
@@ -823,87 +843,182 @@ const SalesLeadDetail = () => {
 
                         {/* Content Section */}
                         <div className="p-6 space-y-6">
-                          {/* Financial Summary */}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-                              <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-2">
-                                Total Payable
-                              </p>
-                              <p className="text-2xl font-bold text-gray-900">
-                                {formatCurrency(sellOrderDetails.totalPayable)}
-                              </p>
-                            </div>
-                            <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-                              <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-2">
-                                Balance Due
-                              </p>
-                              <p className="text-2xl font-bold text-orange-600">
-                                {formatCurrency(sellOrderDetails.balanceAmount)}
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Customer & Payment Info */}
-                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Customer Information */}
-                            <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-                              <div className="flex items-center gap-2 mb-4">
-                                <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                  </svg>
-                                </div>
-                                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Customer</h4>
-                              </div>
-                              <div className="space-y-2">
-                                <div>
-                                  <p className="text-sm font-bold text-gray-900">{sellOrderDetails.customerName}</p>
-                                </div>
-                                {sellOrderDetails.customerContact && (
-                                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                    </svg>
-                                    <span>{sellOrderDetails.customerContact}</span>
-                                  </div>
-                                )}
-                                {sellOrderDetails.customerEmail && (
-                                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                                    </svg>
-                                    <span className="break-all">{sellOrderDetails.customerEmail}</span>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Payment Summary */}
-                            <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
-                              <div className="flex items-center gap-2 mb-4">
-                                <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                                  </svg>
-                                </div>
-                                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Payment Summary</h4>
-                              </div>
-                              <div className="space-y-3">
-                                <div>
-                                  <p className="text-xs text-gray-500 mb-1">Payment Mode</p>
-                                  <p className="text-base font-semibold text-gray-900 capitalize">
-                                    {sellOrderDetails.paymentMode?.replace(/-/g, ' ')}
+                          {isSoldView && lead.sellInvoice ? (
+                            <>
+                              {/* Sell Invoice Summary inside Overview tab for Sold view */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
+                                  <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-2">
+                                    Total Payable
+                                  </p>
+                                  <p className="text-2xl font-bold text-gray-900">
+                                    {formatCurrency(lead.sellInvoice.totalInvoiceValue)}
                                   </p>
                                 </div>
-                                <div className="pt-3 border-t border-gray-200">
-                                  <p className="text-xs text-gray-500 mb-1">Booking Amount Received</p>
-                                  <p className="text-lg font-bold text-green-600">
-                                    {formatCurrency(sellOrderDetails.bookingAmount)}
+                                <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
+                                  <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-2">
+                                    Total Received
+                                  </p>
+                                  <p className="text-2xl font-bold text-green-600">
+                                    {formatCurrency(lead.sellInvoice.totalAmountReceived)}
                                   </p>
                                 </div>
                               </div>
-                            </div>
-                          </div>
+
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Customer (from invoice) */}
+                                <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
+                                  <div className="flex items-center gap-2 mb-4">
+                                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                      </svg>
+                                    </div>
+                                    <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Customer</h4>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div>
+                                      <p className="text-sm font-bold text-gray-900">{lead.sellInvoice.customerName}</p>
+                                    </div>
+                                    {lead.sellInvoice.customerContact && (
+                                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                        </svg>
+                                        <span>{lead.sellInvoice.customerContact}</span>
+                                      </div>
+                                    )}
+                                    {lead.sellInvoice.customerEmail && (
+                                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
+                                        <span className="break-all">{lead.sellInvoice.customerEmail}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Payment Summary (from invoice) */}
+                                <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
+                                  <div className="flex items-center gap-2 mb-4">
+                                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                                      </svg>
+                                    </div>
+                                    <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Payment Summary</h4>
+                                  </div>
+                                  <div className="space-y-3">
+                                    <div>
+                                      <p className="text-xs text-gray-500 mb-1">Payment Mode</p>
+                                      <p className="text-base font-semibold text-gray-900 capitalize">
+                                        {lead.sellInvoice.paymentMode?.replace(/-/g, ' ')}
+                                      </p>
+                                    </div>
+                                    <div className="pt-3 border-t border-gray-200 space-y-1">
+                                      <div className="flex items-center justify-between text-sm">
+                                        <span className="text-gray-600">Booking Amount Received</span>
+                                        <span className="font-semibold">
+                                          {formatCurrency(lead.sellInvoice.bookingAmountReceived)}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center justify-between text-sm">
+                                        <span className="text-gray-600">Balance Payment Received</span>
+                                        <span className="font-semibold">
+                                          {formatCurrency(lead.sellInvoice.balancePaymentReceived)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              {/* Financial Summary (Sell Order) */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
+                                  <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-2">
+                                    Total Payable
+                                  </p>
+                                  <p className="text-2xl font-bold text-gray-900">
+                                    {formatCurrency(sellOrderDetails.totalPayable)}
+                                  </p>
+                                </div>
+                                <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
+                                  <p className="text-xs uppercase tracking-wide text-gray-500 font-semibold mb-2">
+                                    Balance Due
+                                  </p>
+                                  <p className="text-2xl font-bold text-orange-600">
+                                    {formatCurrency(sellOrderDetails.balanceAmount)}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Customer & Payment Info (Sell Order) */}
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Customer Information */}
+                                <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
+                                  <div className="flex items-center gap-2 mb-4">
+                                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                      </svg>
+                                    </div>
+                                    <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Customer</h4>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div>
+                                      <p className="text-sm font-bold text-gray-900">{sellOrderDetails.customerName}</p>
+                                    </div>
+                                    {sellOrderDetails.customerContact && (
+                                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                        </svg>
+                                        <span>{sellOrderDetails.customerContact}</span>
+                                      </div>
+                                    )}
+                                    {sellOrderDetails.customerEmail && (
+                                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
+                                        <span className="break-all">{sellOrderDetails.customerEmail}</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Payment Summary */}
+                                <div className="bg-white rounded-lg p-5 border border-gray-200 shadow-sm">
+                                  <div className="flex items-center gap-2 mb-4">
+                                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                                      </svg>
+                                    </div>
+                                    <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Payment Summary</h4>
+                                  </div>
+                                  <div className="space-y-3">
+                                    <div>
+                                      <p className="text-xs text-gray-500 mb-1">Payment Mode</p>
+                                      <p className="text-base font-semibold text-gray-900 capitalize">
+                                        {sellOrderDetails.paymentMode?.replace(/-/g, ' ')}
+                                      </p>
+                                    </div>
+                                    <div className="pt-3 border-t border-gray-200">
+                                      <p className="text-xs text-gray-500 mb-1">Booking Amount Received</p>
+                                      <p className="text-lg font-bold text-green-600">
+                                        {formatCurrency(sellOrderDetails.bookingAmount)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     )}

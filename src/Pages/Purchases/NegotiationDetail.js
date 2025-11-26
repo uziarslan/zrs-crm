@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
@@ -36,6 +36,7 @@ const NegotiationDetail = () => {
     const [isMovingToInspection, setIsMovingToInspection] = useState(false);
     const [viewingDocumentId, setViewingDocumentId] = useState(null);
     const [downloadingDocumentId, setDownloadingDocumentId] = useState(null);
+    const [notification, setNotification] = useState({ show: false, type: 'success', message: '' });
 
     const documentCategories = [
         { key: 'registrationCard', label: 'Registration Card', accept: '.pdf,.png,.jpg,.jpeg', multiple: false, IconComponent: RegistrationCardIcon },
@@ -47,6 +48,26 @@ const NegotiationDetail = () => {
         fetchLead();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
+
+    const showNotification = useCallback((type, message) => {
+        setNotification({ show: true, type, message });
+        setTimeout(() => {
+            setNotification({ show: false, type, message: '' });
+        }, 5000);
+    }, []);
+
+    const showSuccess = useCallback(
+        (message) => showNotification('success', message),
+        [showNotification]
+    );
+    const showError = useCallback(
+        (message) => showNotification('error', message),
+        [showNotification]
+    );
+    const showWarning = useCallback(
+        (message) => showNotification('warning', message),
+        [showNotification]
+    );
 
     const fetchLead = async () => {
         try {
@@ -70,7 +91,7 @@ const NegotiationDetail = () => {
                 file.type === 'image/jpeg' ||
                 file.type === 'image/jpg';
             if (!isValid) {
-                alert(`${file.name} is not a valid file type. Only PDF, PNG, and JPG are allowed.`);
+                showWarning(`${file.name} is not a valid file type. Only PDF, PNG, and JPG are allowed.`);
             }
             return isValid;
         });
@@ -78,7 +99,7 @@ const NegotiationDetail = () => {
         const validSizeFiles = validFiles.filter(file => {
             const isValid = file.size <= 10 * 1024 * 1024;
             if (!isValid) {
-                alert(`${file.name} is too large. Maximum file size is 10MB.`);
+                showWarning(`${file.name} is too large. Maximum file size is 10MB.`);
             }
             return isValid;
         });
@@ -111,7 +132,7 @@ const NegotiationDetail = () => {
             documents.onlineHistoryCheck.length > 0;
 
         if (!hasFiles) {
-            alert('Please select at least one file to upload');
+            showWarning('Please select at least one file to upload');
             return;
         }
 
@@ -141,7 +162,7 @@ const NegotiationDetail = () => {
                 }
             });
 
-            alert('Documents uploaded successfully!');
+            showSuccess('Documents uploaded successfully!');
             setDocuments({
                 registrationCard: null,
                 carPictures: [],
@@ -150,7 +171,7 @@ const NegotiationDetail = () => {
             setUploadProgress(0);
             fetchLead();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to upload documents');
+            showError(err.response?.data?.message || 'Failed to upload documents');
         } finally {
             setUploading(false);
         }
@@ -174,7 +195,7 @@ const NegotiationDetail = () => {
             window.open(blobUrl, '_blank');
             setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to view document');
+            showError(err.response?.data?.message || 'Failed to view document');
         } finally {
             setViewingDocumentId(null);
         }
@@ -197,7 +218,7 @@ const NegotiationDetail = () => {
             document.body.removeChild(link);
             setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to download document');
+            showError(err.response?.data?.message || 'Failed to download document');
         } finally {
             setDownloadingDocumentId(null);
         }
@@ -218,7 +239,7 @@ const NegotiationDetail = () => {
             setDocumentToDelete(null);
             fetchLead();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to delete document');
+            showError(err.response?.data?.message || 'Failed to delete document');
         } finally {
             setIsDeletingDoc(false);
         }
@@ -226,7 +247,7 @@ const NegotiationDetail = () => {
 
     const handleAddNote = async () => {
         if (!notes.trim()) {
-            alert('Please enter a note');
+            showWarning('Please enter a note');
             return;
         }
 
@@ -235,11 +256,11 @@ const NegotiationDetail = () => {
                 status: lead.status,
                 notes: notes.trim()
             });
-            alert('Note added successfully!');
+            showSuccess('Note added successfully!');
             setNotes('');
             fetchLead();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to add note');
+            showError(err.response?.data?.message || 'Failed to add note');
         }
     };
 
@@ -271,7 +292,7 @@ const NegotiationDetail = () => {
 
     const handleSaveNoteEdit = async (noteId) => {
         if (!editingNoteContent.trim()) {
-            alert('Note content cannot be empty');
+            showWarning('Note content cannot be empty');
             return;
         }
 
@@ -279,12 +300,12 @@ const NegotiationDetail = () => {
             await axiosInstance.put(`/purchases/leads/${id}/notes/${noteId}`, {
                 content: editingNoteContent.trim()
             });
-            alert('Note updated successfully!');
+            showSuccess('Note updated successfully!');
             setEditingNoteId(null);
             setEditingNoteContent('');
             fetchLead();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to update note');
+            showError(err.response?.data?.message || 'Failed to update note');
         }
     };
 
@@ -306,7 +327,7 @@ const NegotiationDetail = () => {
             setDeletingNoteId(null);
             fetchLead();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to delete note');
+            showError(err.response?.data?.message || 'Failed to delete note');
         } finally {
             setIsDeleting(false);
         }
@@ -365,7 +386,7 @@ const NegotiationDetail = () => {
             setShowMoveToInspectionModal(false);
             navigate('/purchases/inspection');
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to move to inspection');
+            showError(err.response?.data?.message || 'Failed to move to inspection');
         } finally {
             setIsMovingToInspection(false);
         }
@@ -421,6 +442,54 @@ const NegotiationDetail = () => {
 
     return (
         <DashboardLayout title={`Negotiation ${lead?.leadId}`}>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+                {notification.show && (
+                    <div
+                        className={`mb-4 border-l-4 p-4 rounded-r-lg ${
+                            notification.type === 'success'
+                                ? 'bg-green-50 border-green-400'
+                                : notification.type === 'warning'
+                                    ? 'bg-yellow-50 border-yellow-400'
+                                    : 'bg-red-50 border-red-400'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between">
+                            <p
+                                className={`text-sm ${
+                                    notification.type === 'success'
+                                        ? 'text-green-700'
+                                        : notification.type === 'warning'
+                                            ? 'text-yellow-700'
+                                            : 'text-red-700'
+                                }`}
+                            >
+                                {notification.message}
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setNotification({ show: false, type: 'success', message: '' })
+                                }
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <svg
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
             {/* Header */}
             <div className="mb-6">
                 <div className="flex items-center justify-between mb-4">

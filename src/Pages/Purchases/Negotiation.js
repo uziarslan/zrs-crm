@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
@@ -22,6 +22,7 @@ const Negotiation = () => {
     const [showConsignmentModal, setShowConsignmentModal] = useState(false);
     const [isConvertingToConsignment, setIsConvertingToConsignment] = useState(false);
     const [leadConsignmentData, setLeadConsignmentData] = useState({}); // Per-lead data: { leadId: { priceAnalysis: {...}, chassisNumber: '' } }
+    const [notification, setNotification] = useState({ show: false, type: 'success', message: '' });
 
     useEffect(() => {
         fetchLeads();
@@ -31,6 +32,26 @@ const Negotiation = () => {
     useEffect(() => {
         setShowBulkBar(selectedLeads.length > 0);
     }, [selectedLeads]);
+
+    const showNotification = useCallback((type, message) => {
+        setNotification({ show: true, type, message });
+        setTimeout(() => {
+            setNotification({ show: false, type, message: '' });
+        }, 5000);
+    }, []);
+
+    const showSuccess = useCallback(
+        (message) => showNotification('success', message),
+        [showNotification]
+    );
+    const showError = useCallback(
+        (message) => showNotification('error', message),
+        [showNotification]
+    );
+    const showWarning = useCallback(
+        (message) => showNotification('warning', message),
+        [showNotification]
+    );
 
     const fetchLeads = async () => {
         try {
@@ -65,7 +86,7 @@ const Negotiation = () => {
             link.click();
             link.remove();
         } catch (err) {
-            alert('Failed to export leads');
+            showError('Failed to export leads');
         }
     };
 
@@ -96,12 +117,12 @@ const Negotiation = () => {
 
     const handleBulkStatusUpdate = async () => {
         if (!bulkStatus) {
-            alert('Please select a status');
+            showWarning('Please select a status');
             return;
         }
 
         if (selectedLeads.length === 0) {
-            alert('Please select at least one lead');
+            showWarning('Please select at least one lead');
             return;
         }
 
@@ -141,12 +162,12 @@ const Negotiation = () => {
                 status: bulkStatus
             });
 
-            alert(`Successfully updated ${selectedLeads.length} lead(s)`);
+            showSuccess(`Successfully updated ${selectedLeads.length} lead(s)`);
             setSelectedLeads([]);
             setBulkStatus('');
             fetchLeads();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to bulk update');
+            showError(err.response?.data?.message || 'Failed to bulk update');
         }
     };
 
@@ -192,7 +213,7 @@ const Negotiation = () => {
         }
 
         if (errors.length > 0) {
-            alert(`Validation errors:\n${errors.join('\n')}`);
+            showWarning(errors.join('\n'));
             return;
         }
 
@@ -232,14 +253,14 @@ const Negotiation = () => {
                 status: 'consignment'
             });
 
-            alert(`Successfully converted ${leadIdsArray.length} lead(s) to consignment`);
+            showSuccess(`Successfully converted ${leadIdsArray.length} lead(s) to consignment`);
             setSelectedLeads([]);
             setBulkStatus('');
             setLeadConsignmentData({});
             setShowConsignmentModal(false);
             fetchLeads();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to convert to consignment');
+            showError(err.response?.data?.message || 'Failed to convert to consignment');
         } finally {
             setIsConvertingToConsignment(false);
         }
@@ -286,7 +307,7 @@ const Negotiation = () => {
             setLeadToMove(null);
             fetchLeads();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to move to inspection');
+            showError(err.response?.data?.message || 'Failed to move to inspection');
         } finally {
             setIsMovingToInspection(false);
         }
@@ -303,8 +324,56 @@ const Negotiation = () => {
     if (loading) {
         return (
             <DashboardLayout title="Negotiation">
-                <div className="flex justify-center py-12">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    {notification.show && (
+                        <div
+                            className={`mb-4 border-l-4 p-4 rounded-r-lg ${
+                                notification.type === 'success'
+                                    ? 'bg-green-50 border-green-400'
+                                    : notification.type === 'warning'
+                                        ? 'bg-yellow-50 border-yellow-400'
+                                        : 'bg-red-50 border-red-400'
+                            }`}
+                        >
+                            <div className="flex items-center justify-between">
+                                <p
+                                    className={`text-sm ${
+                                        notification.type === 'success'
+                                            ? 'text-green-700'
+                                            : notification.type === 'warning'
+                                                ? 'text-yellow-700'
+                                                : 'text-red-700'
+                                    }`}
+                                >
+                                    {notification.message}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setNotification({ show: false, type: 'success', message: '' })
+                                    }
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    <svg
+                                        className="h-4 w-4"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M6 18L18 6M6 6l12 12"
+                                        />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    <div className="flex justify-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+                    </div>
                 </div>
             </DashboardLayout>
         );
@@ -315,6 +384,54 @@ const Negotiation = () => {
 
     return (
         <DashboardLayout>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+                {notification.show && (
+                    <div
+                        className={`mb-4 border-l-4 p-4 rounded-r-lg ${
+                            notification.type === 'success'
+                                ? 'bg-green-50 border-green-400'
+                                : notification.type === 'warning'
+                                    ? 'bg-yellow-50 border-yellow-400'
+                                    : 'bg-red-50 border-red-400'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between">
+                            <p
+                                className={`text-sm ${
+                                    notification.type === 'success'
+                                        ? 'text-green-700'
+                                        : notification.type === 'warning'
+                                            ? 'text-yellow-700'
+                                            : 'text-red-700'
+                                }`}
+                            >
+                                {notification.message}
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setNotification({ show: false, type: 'success', message: '' })
+                                }
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <svg
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
             {/* Header Section */}
             <div className="mb-6">
                 <div className="flex items-center justify-between mb-4">
@@ -403,6 +520,7 @@ const Negotiation = () => {
                                         <option value="">Choose...</option>
                                         <option value="inspection">Move to Inspection</option>
                                         <option value="consignment">Convert to Consignment</option>
+                                        <option value="cancelled">Cancel</option>
                                     </select>
                                 </div>
                             </div>

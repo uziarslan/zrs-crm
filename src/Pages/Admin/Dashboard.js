@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
@@ -16,12 +16,25 @@ const AdminDashboard = () => {
     const [searchLoading, setSearchLoading] = useState(false);
     const [isSearchFocused, setIsSearchFocused] = useState(false);
     const searchRef = useRef(null);
+    const [notification, setNotification] = useState({ show: false, type: 'success', message: '' });
 
     useEffect(() => {
         fetchDashboardStats();
         fetchAdmins();
         fetchGroups();
     }, []);
+
+    const showNotification = useCallback((type, message) => {
+        setNotification({ show: true, type, message });
+        setTimeout(() => {
+            setNotification({ show: false, type, message: '' });
+        }, 5000);
+    }, []);
+
+    const showError = useCallback(
+        (message) => showNotification('error', message),
+        [showNotification]
+    );
 
     // Search functionality
     useEffect(() => {
@@ -174,7 +187,7 @@ const AdminDashboard = () => {
             await axiosInstance.put('/admin/groups', { groups: cleanGroups });
         } catch (e) {
             console.error('Failed to save groups:', e);
-            alert('Failed to save groups. Please try again.');
+            showError('Failed to save groups. Please try again.');
         } finally {
             setSavingGroups(false);
         }
@@ -183,8 +196,56 @@ const AdminDashboard = () => {
     if (loading) {
         return (
             <DashboardLayout title="Admin Dashboard">
-                <div className="flex justify-center py-12">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    {notification.show && (
+                        <div
+                            className={`mb-4 border-l-4 p-4 rounded-r-lg ${
+                                notification.type === 'success'
+                                    ? 'bg-green-50 border-green-400'
+                                    : notification.type === 'warning'
+                                        ? 'bg-yellow-50 border-yellow-400'
+                                        : 'bg-red-50 border-red-400'
+                            }`}
+                        >
+                            <div className="flex items-center justify-between">
+                                <p
+                                    className={`text-sm ${
+                                        notification.type === 'success'
+                                            ? 'text-green-700'
+                                            : notification.type === 'warning'
+                                                ? 'text-yellow-700'
+                                                : 'text-red-700'
+                                    }`}
+                                >
+                                    {notification.message}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setNotification({ show: false, type: 'success', message: '' })
+                                    }
+                                    className="text-gray-400 hover:text-gray-600"
+                                >
+                                    <svg
+                                        className="h-4 w-4"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M6 18L18 6M6 6l12 12"
+                                        />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                    <div className="flex justify-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+                    </div>
                 </div>
             </DashboardLayout>
         );
@@ -192,6 +253,54 @@ const AdminDashboard = () => {
 
     return (
         <DashboardLayout title="Admin Dashboard">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+                {notification.show && (
+                    <div
+                        className={`mb-4 border-l-4 p-4 rounded-r-lg ${
+                            notification.type === 'success'
+                                ? 'bg-green-50 border-green-400'
+                                : notification.type === 'warning'
+                                    ? 'bg-yellow-50 border-yellow-400'
+                                    : 'bg-red-50 border-red-400'
+                        }`}
+                    >
+                        <div className="flex items-center justify-between">
+                            <p
+                                className={`text-sm ${
+                                    notification.type === 'success'
+                                        ? 'text-green-700'
+                                        : notification.type === 'warning'
+                                            ? 'text-yellow-700'
+                                            : 'text-red-700'
+                                }`}
+                            >
+                                {notification.message}
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    setNotification({ show: false, type: 'success', message: '' })
+                                }
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                <svg
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
             {/* Search Bar */}
             <div className="mb-8 relative" ref={searchRef}>
                 <div className="relative">
@@ -343,21 +452,33 @@ const AdminDashboard = () => {
                     <div className="space-y-3">
                         <div className="flex justify-between items-center">
                             <span className="text-gray-600">Purchase Orders:</span>
-                            <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
+                            <button
+                                type="button"
+                                onClick={() => navigate('/purchases/inspection')}
+                                className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium hover:bg-yellow-200 transition-colors"
+                            >
                                 {stats?.approvals?.pendingPOApprovals || 0}
-                            </span>
+                            </button>
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-gray-600">Sales Invoices:</span>
-                            <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
+                            <button
+                                type="button"
+                                onClick={() => navigate('/sales/leads')}
+                                className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium hover:bg-yellow-200 transition-colors"
+                            >
                                 {stats?.approvals?.pendingSalesApprovals || 0}
-                            </span>
+                            </button>
                         </div>
                         <div className="flex justify-between items-center">
                             <span className="text-gray-600">Pending Dual Approval:</span>
-                            <span className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">
+                            <button
+                                type="button"
+                                onClick={() => navigate('/purchases/inspection')}
+                                className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium hover:bg-yellow-200 transition-colors"
+                            >
                                 {stats?.approvals?.pendingDualApprovals || 0}
-                            </span>
+                            </button>
                         </div>
                     </div>
                 </div>
