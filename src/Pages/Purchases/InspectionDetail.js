@@ -62,7 +62,7 @@ const InspectionDetail = () => {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [notes, setNotes] = useState('');
     const [documents, setDocuments] = useState({
-        inspectionReport: null,
+        inspectionReport: [],
         registrationCard: null,
         carPictures: [],
         onlineHistoryCheck: null
@@ -113,7 +113,7 @@ const InspectionDetail = () => {
     const lastNewInvestorInputRef = useRef(null);
 
     const documentCategories = [
-        { key: 'inspectionReport', label: 'Inspection Report', accept: '.pdf', multiple: false, IconComponent: InspectionReportIcon },
+        { key: 'inspectionReport', label: 'Inspection Report', accept: '.pdf,.png,.jpg,.jpeg', multiple: true, IconComponent: InspectionReportIcon },
         { key: 'registrationCard', label: 'Registration Card', accept: '.pdf,.png,.jpg,.jpeg', multiple: false, IconComponent: RegistrationCardIcon },
         { key: 'carPictures', label: 'Car Pictures', accept: '.png,.jpg,.jpeg', multiple: true, IconComponent: CarPicturesIcon },
         { key: 'onlineHistoryCheck', label: 'Online History Check', accept: '.pdf', multiple: false, IconComponent: OnlineHistoryCheckIcon }
@@ -243,7 +243,7 @@ const InspectionDetail = () => {
             return isValid;
         });
 
-        if (category === 'carPictures') {
+        if (category === 'carPictures' || category === 'inspectionReport') {
             setDocuments({
                 ...documents,
                 [category]: [...documents[category], ...validSizeFiles]
@@ -257,16 +257,16 @@ const InspectionDetail = () => {
     };
 
     const removeFile = (category, index = null) => {
-        if (category === 'carPictures' && index !== null) {
-            const newPictures = documents.carPictures.filter((_, i) => i !== index);
-            setDocuments({ ...documents, carPictures: newPictures });
+        if ((category === 'carPictures' || category === 'inspectionReport') && index !== null) {
+            const newFiles = documents[category].filter((_, i) => i !== index);
+            setDocuments({ ...documents, [category]: newFiles });
         } else {
             setDocuments({ ...documents, [category]: null });
         }
     };
 
     const handleUpload = async () => {
-        const hasFiles = documents.inspectionReport ||
+        const hasFiles = documents.inspectionReport.length > 0 ||
             documents.registrationCard ||
             documents.carPictures.length > 0 ||
             documents.onlineHistoryCheck;
@@ -282,9 +282,9 @@ const InspectionDetail = () => {
         try {
             const formData = new FormData();
 
-            if (documents.inspectionReport) {
-                formData.append('inspectionReport', documents.inspectionReport);
-            }
+            documents.inspectionReport.forEach((file) => {
+                formData.append('inspectionReport', file);
+            });
             if (documents.registrationCard) {
                 formData.append('registrationCard', documents.registrationCard);
             }
@@ -307,7 +307,7 @@ const InspectionDetail = () => {
 
             showSuccess('Documents uploaded successfully!');
             setDocuments({
-                inspectionReport: null,
+                inspectionReport: [],
                 registrationCard: null,
                 carPictures: [],
                 onlineHistoryCheck: null
@@ -2261,7 +2261,7 @@ const InspectionDetail = () => {
                                         </div>
                                     )}
 
-                                    {(documents.inspectionReport || documents.registrationCard || documents.carPictures.length > 0 || documents.onlineHistoryCheck) && !uploading && (
+                                    {(documents.inspectionReport.length > 0 || documents.registrationCard || documents.carPictures.length > 0 || documents.onlineHistoryCheck) && !uploading && (
                                         <button
                                             onClick={handleUpload}
                                             className="w-full inline-flex justify-center items-center px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all"

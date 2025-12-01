@@ -31,6 +31,12 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
   const [sellInvoiceSubmitting, setSellInvoiceSubmitting] = useState(false);
   const [sellInvoiceDownloading, setSellInvoiceDownloading] = useState(false);
   const [notification, setNotification] = useState({ show: false, type: 'success', message: '' });
+  const [signedSellOrderFile, setSignedSellOrderFile] = useState(null);
+  const [uploadingSignedSellOrder, setUploadingSignedSellOrder] = useState(false);
+  const [signedSellInvoiceFile, setSignedSellInvoiceFile] = useState(null);
+  const [uploadingSignedSellInvoice, setUploadingSignedSellInvoice] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [deletingDocumentId, setDeletingDocumentId] = useState(null);
 
   const backPath = isSoldView ? '/sales/sold' : '/sales/leads';
   const pageTitle = isSoldView ? 'Sold Lead Detail' : 'Sales Lead Detail';
@@ -146,6 +152,23 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
     }
   };
 
+  const handleDeleteDocument = async (doc) => {
+    if (!doc?._id || !lead?._id) return;
+
+    const docId = doc._id;
+    setDeletingDocumentId(docId);
+
+    try {
+      await axiosInstance.delete(`/purchases/leads/${lead._id}/documents/${docId}`);
+      showSuccess('Document deleted successfully!');
+      await fetchLead();
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to delete document');
+    } finally {
+      setDeletingDocumentId(null);
+    }
+  };
+
   const formatFileSize = (bytes) => {
     if (!bytes && bytes !== 0) return '';
     if (bytes < 1024) return `${bytes} B`;
@@ -163,6 +186,126 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
       (jc.car_recovery_cost || 0) +
       (jc.inspection_cost || 0);
     return purchase + jobTotal;
+  };
+
+  const handleSignedSellOrderSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    const file = files[0];
+    const isValidType =
+      file.type === 'application/pdf' ||
+      file.type === 'image/png' ||
+      file.type === 'image/jpeg' ||
+      file.type === 'image/jpg';
+
+    if (!isValidType) {
+      showError('Invalid file type. Only PDF, PNG, JPG are allowed for Signed Sell Order.');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      showError('File is too large. Maximum file size is 10MB.');
+      e.target.value = '';
+      return;
+    }
+
+    setSignedSellOrderFile(file);
+    e.target.value = '';
+  };
+
+  const handleUploadSignedSellOrder = async () => {
+    if (!signedSellOrderFile || !lead?._id) return;
+
+    setUploadingSignedSellOrder(true);
+    setUploadProgress(0);
+
+    try {
+      const formData = new FormData();
+      formData.append('sellOrder', signedSellOrderFile);
+
+      await axiosInstance.post(`/purchases/leads/${lead._id}/documents`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(progress);
+          }
+        }
+      });
+
+      showSuccess('Signed Sell Order uploaded successfully!');
+      setSignedSellOrderFile(null);
+      setUploadProgress(0);
+      await fetchLead();
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to upload Signed Sell Order');
+    } finally {
+      setUploadingSignedSellOrder(false);
+    }
+  };
+
+  const handleSignedSellInvoiceSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    const file = files[0];
+    const isValidType =
+      file.type === 'application/pdf' ||
+      file.type === 'image/png' ||
+      file.type === 'image/jpeg' ||
+      file.type === 'image/jpg';
+
+    if (!isValidType) {
+      showError('Invalid file type. Only PDF, PNG, JPG are allowed for Signed Sell Invoice.');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      showError('File is too large. Maximum file size is 10MB.');
+      e.target.value = '';
+      return;
+    }
+
+    setSignedSellInvoiceFile(file);
+    e.target.value = '';
+  };
+
+  const handleUploadSignedSellInvoice = async () => {
+    if (!signedSellInvoiceFile || !lead?._id) return;
+
+    setUploadingSignedSellInvoice(true);
+    setUploadProgress(0);
+
+    try {
+      const formData = new FormData();
+      formData.append('sellInvoice', signedSellInvoiceFile);
+
+      await axiosInstance.post(`/purchases/leads/${lead._id}/documents`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        },
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(progress);
+          }
+        }
+      });
+
+      showSuccess('Signed Sell Invoice uploaded successfully!');
+      setSignedSellInvoiceFile(null);
+      setUploadProgress(0);
+      await fetchLead();
+    } catch (err) {
+      showError(err.response?.data?.message || 'Failed to upload Signed Sell Invoice');
+    } finally {
+      setUploadingSignedSellInvoice(false);
+    }
   };
 
   const formatCurrency = (value) => {
@@ -1237,7 +1380,9 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
                               inspectionReport: 'Inspection Report',
                               registrationCard: 'Registration Card',
                               carPictures: 'Car Pictures',
-                              onlineHistoryCheck: 'Suggested History Check'
+                              onlineHistoryCheck: 'Suggested History Check',
+                              sellOrder: 'Signed Sell Order',
+                              sellInvoice: 'Signed Sell Invoice'
                             };
 
                             return Object.entries(grouped).map(([category, attachments]) => (
@@ -1349,6 +1494,62 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
                                               </svg>
                                             )}
                                           </button>
+                                          {attachment.category === 'sellOrder' && !isSoldView && (
+                                            <button
+                                              onClick={() => handleDeleteDocument(attachment)}
+                                              disabled={isViewing || isDownloading || deletingDocumentId === keyId}
+                                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                              title="Delete"
+                                            >
+                                              {deletingDocumentId === keyId ? (
+                                                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                  <path
+                                                    className="opacity-75"
+                                                    fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                  />
+                                                </svg>
+                                              ) : (
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                  />
+                                                </svg>
+                                              )}
+                                            </button>
+                                          )}
+                                          {attachment.category === 'sellInvoice' && isSoldView && (
+                                            <button
+                                              onClick={() => handleDeleteDocument(attachment)}
+                                              disabled={isViewing || isDownloading || deletingDocumentId === keyId}
+                                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                              title="Delete"
+                                            >
+                                              {deletingDocumentId === keyId ? (
+                                                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                  <path
+                                                    className="opacity-75"
+                                                    fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                  />
+                                                </svg>
+                                              ) : (
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                  <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                  />
+                                                </svg>
+                                              )}
+                                            </button>
+                                          )}
                                         </div>
                                       </div>
                                     );
@@ -1376,6 +1577,172 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
                           <p className="text-gray-500 text-sm">No documents available</p>
                         </div>
                       )}
+
+                      {/* Signed Sell Order Upload - Only show when sell order exists but no sell invoice and no document uploaded */}
+                      {hasSellOrder && !hasSellInvoice && (() => {
+                        const hasExistingSignedSellOrder = lead.attachments?.some(a => a.category === 'sellOrder');
+                        return !hasExistingSignedSellOrder;
+                      })() && (
+                          <div className="border-t border-gray-200 pt-4 mt-4">
+                            <div className="bg-white rounded-lg border-2 border-gray-200 p-5">
+                              <h4 className="text-sm font-semibold text-gray-900 mb-3">Signed Sell Order</h4>
+
+                              {/* Upload Section - Only show when no document exists */}
+                              {!uploadingSignedSellOrder && (() => {
+                                const hasExistingSignedSellOrder = lead.attachments?.some(a => a.category === 'sellOrder');
+                                const shouldShowUpload = !hasExistingSignedSellOrder && !signedSellOrderFile;
+
+                                return shouldShowUpload ? (
+                                  <div>
+                                    <input
+                                      type="file"
+                                      id="signed-sell-order-upload"
+                                      accept=".pdf,.png,.jpg,.jpeg"
+                                      onChange={handleSignedSellOrderSelect}
+                                      className="hidden"
+                                      disabled={uploadingSignedSellOrder}
+                                    />
+                                    <label
+                                      htmlFor="signed-sell-order-upload"
+                                      className="flex items-center justify-center gap-2 cursor-pointer px-4 py-2.5 border-2 border-dashed rounded-lg transition-all border-gray-300 bg-gray-50 hover:border-primary-500 hover:bg-primary-50"
+                                    >
+                                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                      </svg>
+                                      <span className="text-sm font-medium text-gray-700">Single file</span>
+                                      <span className="text-xs text-gray-500">Choose File</span>
+                                      <span className="text-xs text-gray-500">(Max 10MB • PDF,PNG,JPG,JPEG)</span>
+                                    </label>
+                                  </div>
+                                ) : null;
+                              })()}
+
+                              {signedSellOrderFile && (
+                                <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs text-gray-900 truncate flex-1">{signedSellOrderFile.name}</span>
+                                    <button
+                                      onClick={() => setSignedSellOrderFile(null)}
+                                      className="ml-2 text-red-600 hover:text-red-800"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                  <button
+                                    onClick={handleUploadSignedSellOrder}
+                                    className="mt-3 w-full inline-flex justify-center items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white font-semibold text-sm rounded-lg shadow-md hover:shadow-lg transition-all"
+                                  >
+                                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    Upload Signed Sell Order
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Upload Progress */}
+                              {uploadingSignedSellOrder && (
+                                <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <svg className="animate-spin h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span className="text-sm font-semibold text-blue-900">Uploading... {uploadProgress}%</span>
+                                  </div>
+                                  <div className="w-full bg-blue-200 rounded-full h-3">
+                                    <div className="bg-blue-600 h-3 rounded-full transition-all" style={{ width: `${uploadProgress}%` }}></div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                      {/* Signed Sell Invoice Upload - Only show when sell invoice exists (sold view) and no document uploaded */}
+                      {hasSellInvoice && (() => {
+                        const hasExistingSignedSellInvoice = lead.attachments?.some(a => a.category === 'sellInvoice');
+                        return !hasExistingSignedSellInvoice;
+                      })() && (
+                          <div className="border-t border-gray-200 pt-4 mt-4">
+                            <div className="bg-white rounded-lg border-2 border-gray-200 p-5">
+                              <h4 className="text-sm font-semibold text-gray-900 mb-3">Signed Sell Invoice</h4>
+
+                              {/* Upload Section - Only show when no document exists */}
+                              {!uploadingSignedSellInvoice && (() => {
+                                const hasExistingSignedSellInvoice = lead.attachments?.some(a => a.category === 'sellInvoice');
+                                const shouldShowUpload = !hasExistingSignedSellInvoice && !signedSellInvoiceFile;
+
+                                return shouldShowUpload ? (
+                                  <div>
+                                    <input
+                                      type="file"
+                                      id="signed-sell-invoice-upload"
+                                      accept=".pdf,.png,.jpg,.jpeg"
+                                      onChange={handleSignedSellInvoiceSelect}
+                                      className="hidden"
+                                      disabled={uploadingSignedSellInvoice}
+                                    />
+                                    <label
+                                      htmlFor="signed-sell-invoice-upload"
+                                      className="flex items-center justify-center gap-2 cursor-pointer px-4 py-2.5 border-2 border-dashed rounded-lg transition-all border-gray-300 bg-gray-50 hover:border-primary-500 hover:bg-primary-50"
+                                    >
+                                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                      </svg>
+                                      <span className="text-sm font-medium text-gray-700">Single file</span>
+                                      <span className="text-xs text-gray-500">Choose File</span>
+                                      <span className="text-xs text-gray-500">(Max 10MB • PDF,PNG,JPG,JPEG)</span>
+                                    </label>
+                                  </div>
+                                ) : null;
+                              })()}
+
+                              {signedSellInvoiceFile && (
+                                <div className="mt-3 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs text-gray-900 truncate flex-1">{signedSellInvoiceFile.name}</span>
+                                    <button
+                                      onClick={() => setSignedSellInvoiceFile(null)}
+                                      className="ml-2 text-red-600 hover:text-red-800"
+                                    >
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                  <button
+                                    onClick={handleUploadSignedSellInvoice}
+                                    className="mt-3 w-full inline-flex justify-center items-center px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white font-semibold text-sm rounded-lg shadow-md hover:shadow-lg transition-all"
+                                  >
+                                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    Upload Signed Sell Invoice
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Upload Progress */}
+                              {uploadingSignedSellInvoice && (
+                                <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4">
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <svg className="animate-spin h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    <span className="text-sm font-semibold text-blue-900">Uploading... {uploadProgress}%</span>
+                                  </div>
+                                  <div className="w-full bg-blue-200 rounded-full h-3">
+                                    <div className="bg-blue-600 h-3 rounded-full transition-all" style={{ width: `${uploadProgress}%` }}></div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                     </div>
                   </div>
                 )}
