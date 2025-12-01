@@ -9,26 +9,72 @@ const Navbar = () => {
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [showUsersDropdown, setShowUsersDropdown] = useState(false);
     const [showSystemDropdown, setShowSystemDropdown] = useState(false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [mobileDropdownOpen, setMobileDropdownOpen] = useState(null);
     const menuRef = useRef(null);
     const usersDropdownRef = useRef(null);
     const systemDropdownRef = useRef(null);
+    const mobileMenuRef = useRef(null);
+    const mobileMenuButtonRef = useRef(null);
+    const usersDropdownTimeoutRef = useRef(null);
+    const systemDropdownTimeoutRef = useRef(null);
 
-    // Close menu when clicking outside
+    // Close menus when clicking outside
     useEffect(() => {
         const handleClickOutside = (event) => {
             if (menuRef.current && !menuRef.current.contains(event.target)) {
                 setShowUserMenu(false);
             }
+            if (usersDropdownRef.current && !usersDropdownRef.current.contains(event.target)) {
+                // Clear timeout if clicking outside
+                if (usersDropdownTimeoutRef.current) {
+                    clearTimeout(usersDropdownTimeoutRef.current);
+                    usersDropdownTimeoutRef.current = null;
+                }
+                setShowUsersDropdown(false);
+            }
+            if (systemDropdownRef.current && !systemDropdownRef.current.contains(event.target)) {
+                // Clear timeout if clicking outside
+                if (systemDropdownTimeoutRef.current) {
+                    clearTimeout(systemDropdownTimeoutRef.current);
+                    systemDropdownTimeoutRef.current = null;
+                }
+                setShowSystemDropdown(false);
+            }
         };
 
-        if (showUserMenu) {
-            document.addEventListener('mousedown', handleClickOutside);
-        }
+        const handleMobileMenuClickOutside = (event) => {
+            // Check if click is on mobile menu button or inside menu - don't close if it is
+            const isMobileMenuButton = mobileMenuButtonRef.current?.contains(event.target);
+            const isInsideMobileMenu = mobileMenuRef.current?.contains(event.target);
+            
+            if (mobileMenuOpen && !isMobileMenuButton && !isInsideMobileMenu) {
+                setMobileMenuOpen(false);
+                setMobileDropdownOpen(null);
+            }
+        };
 
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('click', handleMobileMenuClickOutside);
+        
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('click', handleMobileMenuClickOutside);
+            // Clean up timeouts on unmount
+            if (usersDropdownTimeoutRef.current) {
+                clearTimeout(usersDropdownTimeoutRef.current);
+            }
+            if (systemDropdownTimeoutRef.current) {
+                clearTimeout(systemDropdownTimeoutRef.current);
+            }
         };
-    }, [showUserMenu]);
+    }, [mobileMenuOpen]);
+
+    // Close mobile menu when route changes
+    useEffect(() => {
+        setMobileMenuOpen(false);
+        setMobileDropdownOpen(null);
+    }, [location.pathname]);
 
     const handleLogout = () => {
         logout();
@@ -79,132 +125,348 @@ const Navbar = () => {
         return [];
     };
 
+    const isLinkActive = (link) => {
+        if (link.dropdown) {
+            return link.dropdown.some(subLink =>
+                location.pathname === subLink.path ||
+                location.pathname.startsWith(subLink.path + '/')
+            );
+        }
+        return location.pathname === link.path ||
+            location.pathname.startsWith(link.path + '/');
+    };
+
+    const isSubLinkActive = (subLink) => {
+        return location.pathname === subLink.path ||
+            location.pathname.startsWith(subLink.path + '/');
+    };
+
+    const toggleMobileDropdown = (linkName) => {
+        setMobileDropdownOpen(mobileDropdownOpen === linkName ? null : linkName);
+    };
+
+    const navLinks = getNavLinks();
+
     return (
-        <nav className="bg-white shadow-lg">
+        <nav className="bg-white shadow-md border-b border-gray-200 sticky top-0 z-50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex justify-between h-16">
-                    <div className="flex">
-                        <div className="flex-shrink-0 flex items-center">
-                            <Link
-                                to={user?.role === 'admin' ? '/admin/dashboard' : user?.role === 'manager' ? '/manager/dashboard' : '/investor/dashboard'}
-                                className="text-2xl font-bold text-primary-600 hover:text-primary-700 transition-colors cursor-pointer"
-                            >
+                <div className="flex justify-between items-center h-16">
+                    {/* Logo */}
+                    <div className="flex items-center">
+                        <Link
+                            to={user?.role === 'admin' ? '/admin/dashboard' : user?.role === 'manager' ? '/manager/dashboard' : '/investor/dashboard'}
+                            className="flex items-center space-x-2 group"
+                        >
+                            <div className="flex-shrink-0">
+                                <div className="h-10 w-10 bg-gradient-to-br from-primary-600 to-primary-700 rounded-lg flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
+                                    <span className="text-white font-bold text-lg">Z</span>
+                                </div>
+                            </div>
+                            <span className="text-xl font-bold text-gray-900 group-hover:text-primary-600 transition-colors">
                                 ZRS CRM
-                            </Link>
-                        </div>
-                        <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                            {getNavLinks().map((link) => {
-                                // Check if link has dropdown
-                                if (link.dropdown) {
-                                    const isActive = link.dropdown.some(subLink =>
-                                        location.pathname === subLink.path ||
-                                        location.pathname.startsWith(subLink.path + '/')
-                                    );
-
-                                    // Determine which dropdown state to use
-                                    const isUsersDropdown = link.name === 'Users';
-                                    const showDropdown = isUsersDropdown ? showUsersDropdown : showSystemDropdown;
-                                    const setShowDropdown = isUsersDropdown ? setShowUsersDropdown : setShowSystemDropdown;
-                                    const dropdownRef = isUsersDropdown ? usersDropdownRef : systemDropdownRef;
-
-                                    return (
-                                        <div
-                                            key={link.path}
-                                            className="relative"
-                                            onMouseEnter={() => setShowDropdown(true)}
-                                            onMouseLeave={() => setShowDropdown(false)}
-                                            ref={dropdownRef}
-                                        >
-                                            <button
-                                                className={`inline-flex items-center px-1 pt-1 text-sm font-medium border-b-2 transition-colors h-16 ${isActive
-                                                    ? 'text-primary-600 border-primary-600'
-                                                    : 'text-gray-900 hover:text-primary-600 border-transparent hover:border-primary-600'
-                                                    }`}
-                                            >
-                                                {link.name}
-                                                <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </button>
-                                            {showDropdown && (
-                                                <div className="absolute left-0 top-full mt-0 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
-                                                    <div className="py-1">
-                                                        {link.dropdown.map((subLink) => {
-                                                            const isSubActive = location.pathname === subLink.path ||
-                                                                location.pathname.startsWith(subLink.path + '/');
-                                                            return (
-                                                                <Link
-                                                                    key={subLink.path}
-                                                                    to={subLink.path}
-                                                                    className={`block px-4 py-2 text-sm transition-colors ${isSubActive
-                                                                        ? 'bg-primary-50 text-primary-700 font-medium'
-                                                                        : 'text-gray-700 hover:bg-gray-100'
-                                                                        }`}
-                                                                >
-                                                                    {subLink.name}
-                                                                </Link>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                }
-
-                                // Regular link without dropdown
-                                const isActive = location.pathname === link.path ||
-                                    location.pathname.startsWith(link.path + '/');
-
-                                return (
-                                    <Link
-                                        key={link.path}
-                                        to={link.path}
-                                        className={`inline-flex items-center px-1 pt-1 text-sm font-medium border-b-2 transition-colors ${isActive
-                                            ? 'text-primary-600 border-primary-600'
-                                            : 'text-gray-900 hover:text-primary-600 border-transparent hover:border-primary-600'
-                                            }`}
-                                    >
-                                        {link.name}
-                                    </Link>
-                                );
-                            })}
-                        </div>
+                            </span>
+                        </Link>
                     </div>
 
-                    <div className="flex items-center">
-                        <div className="relative" ref={menuRef}>
+                    {/* Desktop Navigation */}
+                    <div className="hidden lg:flex lg:items-center lg:space-x-1 flex-1 justify-center">
+                        {navLinks.map((link) => {
+                            if (link.dropdown) {
+                                const isUsersDropdown = link.name === 'Users';
+                                const showDropdown = isUsersDropdown ? showUsersDropdown : showSystemDropdown;
+                                const setShowDropdown = isUsersDropdown ? setShowUsersDropdown : setShowSystemDropdown;
+                                const dropdownRef = isUsersDropdown ? usersDropdownRef : systemDropdownRef;
+                                const isActive = isLinkActive(link);
+
+                                // Handle dropdown with delay
+                                const handleMouseEnter = () => {
+                                    // Clear any pending timeout
+                                    if (isUsersDropdown) {
+                                        if (usersDropdownTimeoutRef.current) {
+                                            clearTimeout(usersDropdownTimeoutRef.current);
+                                            usersDropdownTimeoutRef.current = null;
+                                        }
+                                    } else {
+                                        if (systemDropdownTimeoutRef.current) {
+                                            clearTimeout(systemDropdownTimeoutRef.current);
+                                            systemDropdownTimeoutRef.current = null;
+                                        }
+                                    }
+                                    setShowDropdown(true);
+                                };
+
+                                const handleMouseLeave = () => {
+                                    // Set timeout to close dropdown after delay
+                                    const timeoutRef = isUsersDropdown ? usersDropdownTimeoutRef : systemDropdownTimeoutRef;
+                                    timeoutRef.current = setTimeout(() => {
+                                        setShowDropdown(false);
+                                        timeoutRef.current = null;
+                                    }, 300); // 300ms delay
+                                };
+
+                                return (
+                                    <div
+                                        key={link.path}
+                                        className="relative"
+                                        onMouseEnter={handleMouseEnter}
+                                        onMouseLeave={handleMouseLeave}
+                                        ref={dropdownRef}
+                                    >
+                                        <button
+                                            className={`relative px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                                                isActive
+                                                    ? 'text-primary-600 bg-primary-50'
+                                                    : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            {link.name}
+                                            <svg
+                                                className={`ml-1.5 w-4 h-4 inline-block transition-transform duration-200 ${
+                                                    showDropdown ? 'rotate-180' : ''
+                                                }`}
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                        {showDropdown && (
+                                            <div className="absolute left-0 top-full mt-2 w-56 rounded-lg shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50 overflow-hidden">
+                                                <div className="py-1">
+                                                    {link.dropdown.map((subLink) => {
+                                                        const isSubActive = isSubLinkActive(subLink);
+                                                        return (
+                                                            <Link
+                                                                key={subLink.path}
+                                                                to={subLink.path}
+                                                                className={`block px-4 py-2.5 text-sm transition-colors ${
+                                                                    isSubActive
+                                                                        ? 'bg-primary-50 text-primary-700 font-medium border-l-2 border-primary-600'
+                                                                        : 'text-gray-700 hover:bg-gray-50 hover:text-primary-600'
+                                                                }`}
+                                                            >
+                                                                {subLink.name}
+                                                            </Link>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            }
+
+                            const isActive = isLinkActive(link);
+                            return (
+                                <Link
+                                    key={link.path}
+                                    to={link.path}
+                                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                                        isActive
+                                            ? 'text-primary-600 bg-primary-50'
+                                            : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    {link.name}
+                                </Link>
+                            );
+                        })}
+                    </div>
+
+                    {/* User Menu & Mobile Menu Button */}
+                    <div className="flex items-center space-x-4">
+                        {/* Desktop User Menu */}
+                        <div className="hidden lg:block relative" ref={menuRef}>
                             <button
                                 onClick={() => setShowUserMenu(!showUserMenu)}
-                                className="flex items-center text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                                className="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
                             >
-                                <div className="h-10 w-10 rounded-full bg-primary-600 flex items-center justify-center text-white font-bold">
-                                    {user?.name?.charAt(0) || 'U'}
+                                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center text-white font-semibold shadow-sm">
+                                    {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                                 </div>
-                                <div className="ml-3 text-left">
-                                    <div className="text-sm font-medium text-gray-700">{user?.name}</div>
+                                <div className="text-left hidden xl:block">
+                                    <div className="text-sm font-medium text-gray-900">{user?.name}</div>
                                     <div className="text-xs text-gray-500 capitalize">{user?.role}</div>
                                 </div>
+                                <svg
+                                    className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                                        showUserMenu ? 'rotate-180' : ''
+                                    }`}
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
                             </button>
 
                             {showUserMenu && (
-                                <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 z-50">
-                                    <div className="px-4 py-2 text-xs text-gray-500 border-b">{user?.email}</div>
-                                    <button
-                                        onClick={handleLogout}
-                                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                    >
-                                        Sign out
-                                    </button>
+                                <div className="absolute right-0 mt-2 w-64 rounded-lg shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50 overflow-hidden">
+                                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                                        <div className="flex items-center space-x-3">
+                                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center text-white font-semibold">
+                                                {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm font-medium text-gray-900 truncate">{user?.name}</div>
+                                                <div className="text-xs text-gray-500 truncate">{user?.email}</div>
+                                                <div className="text-xs text-primary-600 capitalize mt-0.5">{user?.role}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="py-1">
+                                        <button
+                                            onClick={handleLogout}
+                                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center space-x-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                            </svg>
+                                            <span>Sign out</span>
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
+
+                        {/* Mobile User Avatar */}
+                        <div className="lg:hidden relative" ref={menuRef}>
+                            <button
+                                onClick={() => setShowUserMenu(!showUserMenu)}
+                                className="h-9 w-9 rounded-full bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center text-white font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                            >
+                                {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                            </button>
+
+                            {showUserMenu && (
+                                <div className="absolute right-0 mt-2 w-64 rounded-lg shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50 overflow-hidden">
+                                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                                        <div className="flex items-center space-x-3">
+                                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center text-white font-semibold">
+                                                {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm font-medium text-gray-900 truncate">{user?.name}</div>
+                                                <div className="text-xs text-gray-500 truncate">{user?.email}</div>
+                                                <div className="text-xs text-primary-600 capitalize mt-0.5">{user?.role}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="py-1">
+                                        <button
+                                            onClick={handleLogout}
+                                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center space-x-2"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                            </svg>
+                                            <span>Sign out</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Mobile Menu Button */}
+                        <button
+                            ref={mobileMenuButtonRef}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setMobileMenuOpen(!mobileMenuOpen);
+                            }}
+                            className="lg:hidden p-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            aria-label="Toggle menu"
+                        >
+                            {mobileMenuOpen ? (
+                                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            ) : (
+                                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                                </svg>
+                            )}
+                        </button>
                     </div>
                 </div>
             </div>
+
+            {/* Mobile Menu */}
+            {mobileMenuOpen && (
+                <div className="lg:hidden border-t border-gray-200 bg-white" ref={mobileMenuRef}>
+                    <div className="px-4 pt-2 pb-4 space-y-1">
+                        {navLinks.map((link) => {
+                            if (link.dropdown) {
+                                const isOpen = mobileDropdownOpen === link.name;
+                                const isActive = isLinkActive(link);
+
+                                return (
+                                    <div key={link.path} className="space-y-1">
+                                        <button
+                                            onClick={() => toggleMobileDropdown(link.name)}
+                                            className={`w-full flex items-center justify-between px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                                                isActive
+                                                    ? 'text-primary-600 bg-primary-50'
+                                                    : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            <span>{link.name}</span>
+                                            <svg
+                                                className={`w-4 h-4 transition-transform duration-200 ${
+                                                    isOpen ? 'rotate-180' : ''
+                                                }`}
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                        {isOpen && (
+                                            <div className="pl-4 space-y-1">
+                                                {link.dropdown.map((subLink) => {
+                                                    const isSubActive = isSubLinkActive(subLink);
+                                                    return (
+                                                        <Link
+                                                            key={subLink.path}
+                                                            to={subLink.path}
+                                                            className={`block px-4 py-2.5 text-sm rounded-lg transition-colors ${
+                                                                isSubActive
+                                                                    ? 'bg-primary-50 text-primary-700 font-medium border-l-2 border-primary-600'
+                                                                    : 'text-gray-600 hover:bg-gray-50 hover:text-primary-600'
+                                                            }`}
+                                                        >
+                                                            {subLink.name}
+                                                        </Link>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            }
+
+                            const isActive = isLinkActive(link);
+                            return (
+                                <Link
+                                    key={link.path}
+                                    to={link.path}
+                                    className={`block px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                                        isActive
+                                            ? 'text-primary-600 bg-primary-50'
+                                            : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    {link.name}
+                                </Link>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
         </nav>
     );
 };
 
 export default Navbar;
-
