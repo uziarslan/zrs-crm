@@ -48,6 +48,20 @@ const CarDetailsPrint = () => {
 
     const carPictures = lead?.attachments?.filter(doc => doc.category === 'carPictures') || [];
 
+    // Calculate Job Costing Total
+    const jobCostingTotal = (() => {
+        const transferCost = Number(lead?.jobCosting?.transferCost || 0);
+        const detailingCost = Number(lead?.jobCosting?.detailing_inspection_cost || 0);
+        const agentCommission = Number(lead?.jobCosting?.agent_commision || 0);
+        const carRecoveryCost = Number(lead?.jobCosting?.car_recovery_cost || 0);
+        const otherCharges = Number(lead?.jobCosting?.other_charges || 0);
+        return transferCost + detailingCost + agentCommission + carRecoveryCost + otherCharges;
+    })();
+
+    // Calculate Car Total Price (Purchased Final Price + Job Costing Total)
+    const purchasedFinalPrice = Number(lead?.priceAnalysis?.purchasedFinalPrice || 0);
+    const carTotalPrice = purchasedFinalPrice + jobCostingTotal;
+
     return (
         <div className="min-h-screen bg-white p-8 print:p-4">
             {/* Print Button - Hidden when printing */}
@@ -80,7 +94,7 @@ const CarDetailsPrint = () => {
                             Car Pictures
                         </h2>
                         <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
-                            {carPictures.map((pic, index) => (
+                            {carPictures.slice(0, 12).map((pic, index) => (
                                 <div key={pic._id || index} className="aspect-square max-w-[150px] mx-auto">
                                     <img
                                         src={pic.url}
@@ -186,7 +200,7 @@ const CarDetailsPrint = () => {
                 )}
 
                 {/* Job Costing */}
-                {(lead?.jobCosting?.transferCost || lead?.jobCosting?.detailing_inspection_cost || lead?.jobCosting?.agent_commision || lead?.jobCosting?.car_recovery_cost || lead?.jobCosting?.other_charges) && (
+                {(lead?.jobCosting?.transferCost || lead?.jobCosting?.detailing_inspection_cost || lead?.jobCosting?.agent_commision || lead?.jobCosting?.car_recovery_cost || lead?.jobCosting?.other_charges || jobCostingTotal > 0) && (
                     <div className="mb-8">
                         <h2 className="text-2xl font-bold text-gray-900 mb-4 border-b-2 border-gray-300 pb-2">
                             Job Costing
@@ -232,7 +246,28 @@ const CarDetailsPrint = () => {
                                     </p>
                                 </div>
                             )}
+                            {/* Job Costing Total - Last item in the grid, spans all columns */}
+                            <div>
+                                <p className="text-sm text-gray-600 mb-1">Job Costing Total</p>
+                                <p className="text-lg font-semibold text-gray-900">
+                                    AED {jobCostingTotal.toLocaleString()}
+                                </p>
+                            </div>
                         </div>
+                        {/* Car Total Price */}
+                        {carTotalPrice > 0 && (
+                            <div className="mt-4 pt-4 border-t-2 border-gray-400">
+                                <div className="flex justify-between items-center">
+                                    <p className="text-lg font-bold text-gray-900">Car Total Price</p>
+                                    <p className="text-xl font-bold text-gray-900">
+                                        AED {carTotalPrice.toLocaleString()}
+                                    </p>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    (Purchased Final Price: AED {purchasedFinalPrice.toLocaleString()} + Job Costing Total: AED {jobCostingTotal.toLocaleString()})
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
 

@@ -11,6 +11,29 @@ import RegistrationCardIcon from '../../assets/icons/registration-card.svg';
 import CarPicturesIcon from '../../assets/icons/car-pictures.svg';
 import OnlineHistoryCheckIcon from '../../assets/icons/online-history-check.svg';
 
+// Utility functions for number formatting with commas
+const formatNumberWithCommas = (value) => {
+    if (!value && value !== 0) return '';
+    // Remove any existing commas and parse
+    const numStr = String(value).replace(/,/g, '');
+    // Handle empty string
+    if (numStr === '' || numStr === '.') return numStr;
+    // Split by decimal point if exists
+    const parts = numStr.split('.');
+    // Format the integer part with commas (only if there's a number)
+    if (parts[0]) {
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    }
+    // Return formatted number (handle case where user is typing just a decimal point)
+    return parts.length > 1 ? parts.join('.') : parts[0];
+};
+
+const parseFormattedNumber = (value) => {
+    if (!value) return '';
+    // Remove commas and return the numeric string
+    return value.replace(/,/g, '');
+};
+
 const InspectionDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
@@ -1021,9 +1044,10 @@ const InspectionDetail = () => {
     };
 
     const handleNewInvestorAmountChange = (value) => {
-        const cleanValue = value.replace(/[^\d.]/g, '');
+        // Parse the formatted value (remove commas) before storing
+        const parsedValue = parseFormattedNumber(value);
         lastNewInvestorInputRef.current = 'amount';
-        setNewInvestorAmount(cleanValue);
+        setNewInvestorAmount(parsedValue);
     };
 
     const handleAddInvestor = () => {
@@ -1335,9 +1359,11 @@ const InspectionDetail = () => {
     };
 
     const handlePriceAnalysisChange = (field, value) => {
+        // Parse the formatted value (remove commas) before storing
+        const parsedValue = parseFormattedNumber(value);
         setPriceAnalysis({
             ...priceAnalysis,
-            [field]: value
+            [field]: parsedValue
         });
     };
 
@@ -1681,18 +1707,20 @@ const InspectionDetail = () => {
                                                         <span className="text-gray-500 text-sm font-medium">AED</span>
                                                     </div>
                                                     <input
-                                                        type="number"
-                                                        value={priceAnalysis.minSellingPrice}
-                                                        onChange={(e) => handlePriceAnalysisChange('minSellingPrice', e.target.value)}
+                                                        type="text"
+                                                        value={formatNumberWithCommas(priceAnalysis.minSellingPrice)}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value.replace(/[^\d.]/g, '');
+                                                            handlePriceAnalysisChange('minSellingPrice', value);
+                                                        }}
                                                         onWheel={(e) => e.target.blur()}
                                                         disabled={isSubmittedForApproval()}
-                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-lg font-semibold [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-lg font-semibold ${isSubmittedForApproval()
                                                             ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
                                                             : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
                                                             }`}
                                                         placeholder="0.00"
-                                                        min="0"
-                                                        step="0.01"
+                                                        inputMode="decimal"
                                                     />
                                                 </div>
                                                 <p className="text-xs text-gray-500 mt-1">Minimum expected selling price</p>
@@ -1706,18 +1734,20 @@ const InspectionDetail = () => {
                                                         <span className="text-gray-500 text-sm font-medium">AED</span>
                                                     </div>
                                                     <input
-                                                        type="number"
-                                                        value={priceAnalysis.maxSellingPrice}
-                                                        onChange={(e) => handlePriceAnalysisChange('maxSellingPrice', e.target.value)}
+                                                        type="text"
+                                                        value={formatNumberWithCommas(priceAnalysis.maxSellingPrice)}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value.replace(/[^\d.]/g, '');
+                                                            handlePriceAnalysisChange('maxSellingPrice', value);
+                                                        }}
                                                         onWheel={(e) => e.target.blur()}
                                                         disabled={isSubmittedForApproval()}
-                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-lg font-semibold [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-lg font-semibold ${isSubmittedForApproval()
                                                             ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
                                                             : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
                                                             }`}
                                                         placeholder="0.00"
-                                                        min="0"
-                                                        step="0.01"
+                                                        inputMode="decimal"
                                                     />
                                                 </div>
                                                 <p className="text-xs text-gray-500 mt-1">Maximum expected selling price</p>
@@ -1752,18 +1782,19 @@ const InspectionDetail = () => {
                                                         <span className="text-gray-500 text-sm font-medium">AED</span>
                                                     </div>
                                                     <input
-                                                        type="number"
-                                                        value={priceAnalysis.purchasedFinalPrice}
-                                                        onChange={(e) => handlePriceAnalysisChange('purchasedFinalPrice', e.target.value)}
+                                                        type="text"
+                                                        value={formatNumberWithCommas(priceAnalysis.purchasedFinalPrice)}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value.replace(/[^\d.]/g, '');
+                                                            handlePriceAnalysisChange('purchasedFinalPrice', value);
+                                                        }}
                                                         onWheel={(e) => e.target.blur()}
                                                         disabled={isSubmittedForApproval()}
-                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-lg font-semibold [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-lg font-semibold ${isSubmittedForApproval()
                                                             ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
                                                             : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
                                                             }`}
                                                         placeholder="0.00"
-                                                        min="0"
-                                                        step="0.01"
                                                         inputMode="decimal"
                                                     />
                                                 </div>
@@ -1785,18 +1816,20 @@ const InspectionDetail = () => {
                                                         <span className="text-gray-500 text-sm font-medium">AED</span>
                                                     </div>
                                                     <input
-                                                        type="number"
-                                                        value={jobCosting.transferCost}
-                                                        onChange={(e) => setJobCosting({ ...jobCosting, transferCost: e.target.value })}
+                                                        type="text"
+                                                        value={formatNumberWithCommas(jobCosting.transferCost)}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value.replace(/[^\d.]/g, '');
+                                                            setJobCosting({ ...jobCosting, transferCost: value });
+                                                        }}
                                                         onWheel={(e) => e.target.blur()}
                                                         disabled={isSubmittedForApproval()}
-                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base ${isSubmittedForApproval()
                                                             ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
                                                             : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
                                                             }`}
                                                         placeholder="0.00"
-                                                        min="0"
-                                                        step="0.01"
+                                                        inputMode="decimal"
                                                     />
                                                 </div>
                                             </div>
@@ -1809,18 +1842,20 @@ const InspectionDetail = () => {
                                                         <span className="text-gray-500 text-sm font-medium">AED</span>
                                                     </div>
                                                     <input
-                                                        type="number"
-                                                        value={jobCosting.detailing_inspection_cost}
-                                                        onChange={(e) => setJobCosting({ ...jobCosting, detailing_inspection_cost: e.target.value })}
+                                                        type="text"
+                                                        value={formatNumberWithCommas(jobCosting.detailing_inspection_cost)}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value.replace(/[^\d.]/g, '');
+                                                            setJobCosting({ ...jobCosting, detailing_inspection_cost: value });
+                                                        }}
                                                         onWheel={(e) => e.target.blur()}
                                                         disabled={isSubmittedForApproval()}
-                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base ${isSubmittedForApproval()
                                                             ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
                                                             : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
                                                             }`}
                                                         placeholder="0.00"
-                                                        min="0"
-                                                        step="0.01"
+                                                        inputMode="decimal"
                                                     />
                                                 </div>
                                             </div>
@@ -1833,18 +1868,20 @@ const InspectionDetail = () => {
                                                         <span className="text-gray-500 text-sm font-medium">AED</span>
                                                     </div>
                                                     <input
-                                                        type="number"
-                                                        value={jobCosting.agent_commision}
-                                                        onChange={(e) => setJobCosting({ ...jobCosting, agent_commision: e.target.value })}
+                                                        type="text"
+                                                        value={formatNumberWithCommas(jobCosting.agent_commision)}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value.replace(/[^\d.]/g, '');
+                                                            setJobCosting({ ...jobCosting, agent_commision: value });
+                                                        }}
                                                         onWheel={(e) => e.target.blur()}
                                                         disabled={isSubmittedForApproval()}
-                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base ${isSubmittedForApproval()
                                                             ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
                                                             : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
                                                             }`}
                                                         placeholder="0.00"
-                                                        min="0"
-                                                        step="0.01"
+                                                        inputMode="decimal"
                                                     />
                                                 </div>
                                             </div>
@@ -1857,18 +1894,20 @@ const InspectionDetail = () => {
                                                         <span className="text-gray-500 text-sm font-medium">AED</span>
                                                     </div>
                                                     <input
-                                                        type="number"
-                                                        value={jobCosting.car_recovery_cost}
-                                                        onChange={(e) => setJobCosting({ ...jobCosting, car_recovery_cost: e.target.value })}
+                                                        type="text"
+                                                        value={formatNumberWithCommas(jobCosting.car_recovery_cost)}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value.replace(/[^\d.]/g, '');
+                                                            setJobCosting({ ...jobCosting, car_recovery_cost: value });
+                                                        }}
                                                         onWheel={(e) => e.target.blur()}
                                                         disabled={isSubmittedForApproval()}
-                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base ${isSubmittedForApproval()
                                                             ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
                                                             : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
                                                             }`}
                                                         placeholder="0.00"
-                                                        min="0"
-                                                        step="0.01"
+                                                        inputMode="decimal"
                                                     />
                                                 </div>
                                             </div>
@@ -1881,18 +1920,20 @@ const InspectionDetail = () => {
                                                         <span className="text-gray-500 text-sm font-medium">AED</span>
                                                     </div>
                                                     <input
-                                                        type="number"
-                                                        value={jobCosting.other_charges}
-                                                        onChange={(e) => setJobCosting({ ...jobCosting, other_charges: e.target.value })}
+                                                        type="text"
+                                                        value={formatNumberWithCommas(jobCosting.other_charges)}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value.replace(/[^\d.]/g, '');
+                                                            setJobCosting({ ...jobCosting, other_charges: value });
+                                                        }}
                                                         onWheel={(e) => e.target.blur()}
                                                         disabled={isSubmittedForApproval()}
-                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${isSubmittedForApproval()
+                                                        className={`w-full pl-14 pr-3 py-3 border-2 rounded-lg text-base ${isSubmittedForApproval()
                                                             ? 'border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed'
                                                             : 'border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500'
                                                             }`}
                                                         placeholder="0.00"
-                                                        min="0"
-                                                        step="0.01"
+                                                        inputMode="decimal"
                                                     />
                                                 </div>
                                             </div>
@@ -2569,14 +2610,16 @@ const InspectionDetail = () => {
                                                                     Amount (AED) <span className="text-red-500">*</span>
                                                                 </label>
                                                                 <input
-                                                                    type="number"
-                                                                    value={newInvestorAmount}
-                                                                    onChange={(e) => handleNewInvestorAmountChange(e.target.value)}
+                                                                    type="text"
+                                                                    value={formatNumberWithCommas(newInvestorAmount)}
+                                                                    onChange={(e) => {
+                                                                        const value = e.target.value.replace(/[^\d.]/g, '');
+                                                                        handleNewInvestorAmountChange(value);
+                                                                    }}
                                                                     onWheel={(e) => e.target.blur()}
-                                                                    min="0"
-                                                                    step="0.01"
-                                                                    className="w-full border-2 border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]"
+                                                                    className="w-full border-2 border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
                                                                     placeholder="0.00"
+                                                                    inputMode="decimal"
                                                                 />
                                                             </div>
 
