@@ -691,10 +691,10 @@ const InventoryDetail = () => {
         const jobCosting = vehicle.jobCosting || {};
         const requiredCostTypes = [];
         if (jobCosting.transferCost > 0) requiredCostTypes.push('transferCost');
-        if (jobCosting.detailing_inspection_cost > 0) requiredCostTypes.push('detailingInspectionCost');
+        if (jobCosting.detailing_cost > 0) requiredCostTypes.push('detailingCost');
         if (jobCosting.agent_commision > 0) requiredCostTypes.push('agentCommission');
         if (jobCosting.car_recovery_cost > 0) requiredCostTypes.push('carRecoveryCost');
-        if (jobCosting.other_charges > 0) requiredCostTypes.push('otherCharges');
+        if (jobCosting.inspection_cost > 0) requiredCostTypes.push('inspectionCost');
 
         const invoices = vehicle.invoices || [];
         let financialCompleted = 0;
@@ -906,10 +906,10 @@ const InventoryDetail = () => {
     const jobCosting = vehicle.jobCosting || {};
     const requiredCostTypes = [];
     if (jobCosting.transferCost > 0) requiredCostTypes.push('transferCost');
-    if (jobCosting.detailing_inspection_cost > 0) requiredCostTypes.push('detailingInspectionCost');
+    if (jobCosting.detailing_cost > 0) requiredCostTypes.push('detailingCost');
     if (jobCosting.agent_commision > 0) requiredCostTypes.push('agentCommission');
     if (jobCosting.car_recovery_cost > 0) requiredCostTypes.push('carRecoveryCost');
-    if (jobCosting.other_charges > 0) requiredCostTypes.push('otherCharges');
+    if (jobCosting.inspection_cost > 0) requiredCostTypes.push('inspectionCost');
 
     const invoicesForSummary = vehicle.invoices || [];
     let financialCompleted = 0;
@@ -1196,9 +1196,9 @@ const InventoryDetail = () => {
                                                             </p>
                                                         </div>
                                                         <div className="bg-white rounded-lg p-3 border border-gray-200">
-                                                            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Detailing / Inspection Cost</p>
+                                                            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Detailing Cost</p>
                                                             <p className="text-sm font-semibold text-gray-900">
-                                                                AED {(vehicle.jobCosting.detailing_inspection_cost || 0).toLocaleString()}
+                                                                AED {(vehicle.jobCosting.detailing_cost || 0).toLocaleString()}
                                                             </p>
                                                         </div>
                                                         <div className="bg-white rounded-lg p-3 border border-gray-200">
@@ -1214,9 +1214,9 @@ const InventoryDetail = () => {
                                                             </p>
                                                         </div>
                                                         <div className="bg-white rounded-lg p-3 border border-gray-200">
-                                                            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Other Charges</p>
+                                                            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Inspection Cost</p>
                                                             <p className="text-sm font-semibold text-gray-900">
-                                                                AED {(vehicle.jobCosting.other_charges || 0).toLocaleString()}
+                                                                AED {(vehicle.jobCosting.inspection_cost || 0).toLocaleString()}
                                                             </p>
                                                         </div>
                                                         <div className="bg-white rounded-lg p-3 border border-gray-200">
@@ -1226,10 +1226,10 @@ const InventoryDetail = () => {
                                                                     const jc = vehicle.jobCosting || {};
                                                                     const total =
                                                                         (jc.transferCost || 0) +
-                                                                        (jc.detailing_inspection_cost || 0) +
+                                                                        (jc.detailing_cost || 0) +
                                                                         (jc.agent_commision || 0) +
                                                                         (jc.car_recovery_cost || 0) +
-                                                                        (jc.other_charges || 0);
+                                                                        (jc.inspection_cost || 0);
                                                                     return `AED ${total.toLocaleString()}`;
                                                                 })()}
                                                             </p>
@@ -1241,10 +1241,10 @@ const InventoryDetail = () => {
                                                                     const jc = vehicle.jobCosting || {};
                                                                     const jobTotal =
                                                                         (jc.transferCost || 0) +
-                                                                        (jc.detailing_inspection_cost || 0) +
+                                                                        (jc.detailing_cost || 0) +
                                                                         (jc.agent_commision || 0) +
                                                                         (jc.car_recovery_cost || 0) +
-                                                                        (jc.other_charges || 0);
+                                                                        (jc.inspection_cost || 0);
                                                                     const purchase = vehicle.purchasePrice || 0;
                                                                     const grandTotal = purchase + jobTotal;
                                                                     return `AED ${grandTotal.toLocaleString()}`;
@@ -1963,11 +1963,11 @@ const InventoryDetail = () => {
                                                     invoice: findInvoiceForCost('transferCost')
                                                 },
                                                 {
-                                                    key: 'detailingInspectionCost',
-                                                    label: 'Detailing / Inspection Cost',
-                                                    value: jc.detailing_inspection_cost || 0,
-                                                    investorField: 'detailingInspectionCostInvestor',
-                                                    invoice: findInvoiceForCost('detailingInspectionCost')
+                                                    key: 'detailingCost',
+                                                    label: 'Detailing Cost',
+                                                    value: jc.detailing_cost || 0,
+                                                    investorField: 'detailingCostInvestor',
+                                                    invoice: findInvoiceForCost('detailingCost')
                                                 },
                                                 {
                                                     key: 'agentCommission',
@@ -1984,11 +1984,11 @@ const InventoryDetail = () => {
                                                     invoice: findInvoiceForCost('carRecoveryCost')
                                                 },
                                                 {
-                                                    key: 'otherCharges',
-                                                    label: 'Other Charges',
-                                                    value: jc.other_charges || 0,
-                                                    investorField: 'otherChargesInvestor',
-                                                    invoice: findInvoiceForCost('otherCharges')
+                                                    key: 'inspectionCost',
+                                                    label: 'Inspection Cost',
+                                                    value: jc.inspection_cost || 0,
+                                                    investorField: 'inspectionCostInvestor',
+                                                    invoice: findInvoiceForCost('inspectionCost')
                                                 }
                                             ].filter(field => field.value > 0).map(field => ({
                                                 ...field,

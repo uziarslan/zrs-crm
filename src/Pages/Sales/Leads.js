@@ -124,11 +124,10 @@ const SalesLeads = () => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   <span
-                    className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${
-                      lead.type === 'consignment'
+                    className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${lead.type === 'consignment'
                         ? 'bg-purple-100 text-purple-800'
                         : 'bg-blue-100 text-blue-800'
-                    }`}
+                      }`}
                   >
                     {lead.type === 'consignment' ? 'Consignment' : 'Purchase'}
                   </span>
@@ -163,10 +162,10 @@ const SalesLeads = () => {
                     const jc = lead.jobCosting || {};
                     const jobTotal =
                       (jc.transferCost || 0) +
-                      (jc.detailing_inspection_cost || 0) +
+                      (jc.detailing_cost || 0) +
                       (jc.agent_commision || 0) +
                       (jc.car_recovery_cost || 0) +
-                      (jc.other_charges || 0);
+                      (jc.inspection_cost || 0);
                     const total = purchase + jobTotal;
                     return total > 0 ? `AED ${total.toLocaleString()}` : '-';
                   })()}

@@ -46,7 +46,7 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
     insuranceInclusion: 'included',
     insuranceAmount: '',
     bankFinanceFee: '',
-    otherCharges: '',
+    inspectionCost: '',
     paymentMode: 'Cash',
     bookingAmount: ''
   });
@@ -158,10 +158,10 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
     const jc = lead?.jobCosting || {};
     const jobTotal =
       (jc.transferCost || 0) +
-      (jc.detailing_inspection_cost || 0) +
+      (jc.detailing_cost || 0) +
       (jc.agent_commision || 0) +
       (jc.car_recovery_cost || 0) +
-      (jc.other_charges || 0);
+      (jc.inspection_cost || 0);
     return purchase + jobTotal;
   };
 
@@ -190,7 +190,7 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
     'transferCostAmount',
     'insuranceAmount',
     'bankFinanceFee',
-    'otherCharges',
+    'inspectionCost',
     'bookingAmount'
   ];
 
@@ -222,9 +222,9 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
     const transferCost = parseNumericInput(sellOrderForm.transferCostAmount);
     const insurance = parseNumericInput(sellOrderForm.insuranceAmount);
     const bankFee = parseNumericInput(sellOrderForm.bankFinanceFee);
-    const other = parseNumericInput(sellOrderForm.otherCharges);
+    const inspectionCost = parseNumericInput(sellOrderForm.inspectionCost);
     const booking = parseNumericInput(sellOrderForm.bookingAmount);
-    const total = selling + transferCost + insurance + bankFee + other;
+    const total = selling + transferCost + insurance + bankFee + inspectionCost;
     return {
       totalPayable: total,
       balanceDue: Math.max(total - booking, 0)
@@ -263,7 +263,7 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
       insuranceInclusion: 'included',
       insuranceAmount: '',
       bankFinanceFee: '',
-      otherCharges: '',
+      inspectionCost: '',
       paymentMode: 'Cash',
       bookingAmount: ''
     });
@@ -304,7 +304,7 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
         insuranceInclusion: sellOrderForm.insuranceInclusion || 'included',
         insuranceAmount: parseNumericInput(sellOrderForm.insuranceAmount),
         bankFinanceFee: parseNumericInput(sellOrderForm.bankFinanceFee),
-        otherCharges: parseNumericInput(sellOrderForm.otherCharges),
+        inspectionCost: parseNumericInput(sellOrderForm.inspectionCost),
         paymentMode: sellOrderForm.paymentMode || 'Cash',
         bookingAmount: parseNumericInput(sellOrderForm.bookingAmount)
       };
@@ -534,7 +534,7 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
     priceAnalysisData.purchasedFinalPrice !== undefined && priceAnalysisData.purchasedFinalPrice !== null
       ? toNumberValue(priceAnalysisData.purchasedFinalPrice)
       : null;
-  const jobCostingTotalValue = ['transferCost', 'detailing_inspection_cost', 'agent_commision', 'car_recovery_cost', 'other_charges'].reduce(
+  const jobCostingTotalValue = ['transferCost', 'detailing_cost', 'agent_commision', 'car_recovery_cost', 'inspection_cost'].reduce(
     (sum, key) => sum + toNumberValue(jobCostingData[key]),
     0
   );
@@ -810,32 +810,32 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
                               <p className="text-sm font-semibold text-white">
                                 {isSoldView && lead.sellInvoice
                                   ? (lead.sellInvoice.dateOfFinalPayment
-                                      ? new Date(lead.sellInvoice.dateOfFinalPayment).toLocaleString('en-GB', {
-                                          day: '2-digit',
-                                          month: '2-digit',
-                                          year: 'numeric',
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                          second: '2-digit'
-                                        })
-                                      : 'N/A')
+                                    ? new Date(lead.sellInvoice.dateOfFinalPayment).toLocaleString('en-GB', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      second: '2-digit'
+                                    })
+                                    : 'N/A')
                                   : (sellOrderDetails.date
-                                      ? new Date(sellOrderDetails.date).toLocaleString('en-GB', {
-                                          day: '2-digit',
-                                          month: '2-digit',
-                                          year: 'numeric',
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                          second: '2-digit'
-                                        })
-                                      : new Date(sellOrderDetails.createdAt || Date.now()).toLocaleString('en-GB', {
-                                          day: '2-digit',
-                                          month: '2-digit',
-                                          year: 'numeric',
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                          second: '2-digit'
-                                        }))}
+                                    ? new Date(sellOrderDetails.date).toLocaleString('en-GB', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      second: '2-digit'
+                                    })
+                                    : new Date(sellOrderDetails.createdAt || Date.now()).toLocaleString('en-GB', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      second: '2-digit'
+                                    }))}
                               </p>
                             </div>
                           </div>
@@ -1147,9 +1147,9 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
                                   </p>
                                 </div>
                                 <div className="bg-white rounded-lg p-3 border border-gray-200">
-                                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Detailing / Inspection Cost</p>
+                                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Detailing Cost</p>
                                   <p className="text-sm font-semibold text-gray-900">
-                                    AED {(lead.jobCosting.detailing_inspection_cost || 0).toLocaleString()}
+                                    AED {(lead.jobCosting.detailing_cost || 0).toLocaleString()}
                                   </p>
                                 </div>
                                 <div className="bg-white rounded-lg p-3 border border-gray-200">
@@ -1165,9 +1165,9 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
                                   </p>
                                 </div>
                                 <div className="bg-white rounded-lg p-3 border border-gray-200">
-                                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Other Charges</p>
+                                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Inspection Cost</p>
                                   <p className="text-sm font-semibold text-gray-900">
-                                    AED {(lead.jobCosting.other_charges || 0).toLocaleString()}
+                                    AED {(lead.jobCosting.inspection_cost || 0).toLocaleString()}
                                   </p>
                                 </div>
                                 <div className="bg-white rounded-lg p-3 border border-gray-200">
@@ -1731,12 +1731,12 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
                             />
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700">Other Charges (AED)</label>
+                            <label className="block text-sm font-medium text-gray-700">Inspection Cost (AED)</label>
                             <input
                               type="text"
                               inputMode="decimal"
-                              name="otherCharges"
-                              value={sellOrderForm.otherCharges}
+                              name="inspectionCost"
+                              value={sellOrderForm.inspectionCost}
                               onWheel={(event) => event.currentTarget.blur()}
                               onChange={handleSellOrderInputChange}
                               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 number-input-no-spin"

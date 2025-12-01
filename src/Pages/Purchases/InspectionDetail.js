@@ -82,10 +82,10 @@ const InspectionDetail = () => {
     });
     const [jobCosting, setJobCosting] = useState({
         transferCost: '',
-        detailing_inspection_cost: '',
+        detailing_cost: '',
         agent_commision: '',
         car_recovery_cost: '',
-        other_charges: ''
+        inspection_cost: ''
     });
     const [chassisNumber, setChassisNumber] = useState('');
     const [savingPrice, setSavingPrice] = useState(false);
@@ -202,10 +202,10 @@ const InspectionDetail = () => {
             if (leadData.jobCosting) {
                 setJobCosting({
                     transferCost: leadData.jobCosting.transferCost || '',
-                    detailing_inspection_cost: leadData.jobCosting.detailing_inspection_cost || '',
+                    detailing_cost: leadData.jobCosting.detailing_cost || '',
                     agent_commision: leadData.jobCosting.agent_commision || '',
                     car_recovery_cost: leadData.jobCosting.car_recovery_cost || '',
-                    other_charges: leadData.jobCosting.other_charges || ''
+                    inspection_cost: leadData.jobCosting.inspection_cost || ''
                 });
             }
         } catch (err) {
@@ -605,7 +605,7 @@ const InspectionDetail = () => {
     const isPriceAnalysisComplete = () => {
         const pa = lead?.priceAnalysis || {};
         const jc = lead?.jobCosting || {};
-        return Boolean(pa.minSellingPrice && pa.maxSellingPrice && pa.purchasedFinalPrice && jc.transferCost && jc.detailing_inspection_cost);
+        return Boolean(pa.minSellingPrice && pa.maxSellingPrice && pa.purchasedFinalPrice && jc.transferCost && jc.detailing_cost);
     };
 
     const getInvestorDetails = useCallback((investorId) => {
@@ -841,18 +841,18 @@ const InspectionDetail = () => {
 
     const jobCostingData = {
         transferCost: parseJobCostValue(jobCostingFromState.transferCost, jobCostingFromLead.transferCost),
-        detailing_inspection_cost: parseJobCostValue(jobCostingFromState.detailing_inspection_cost, jobCostingFromLead.detailing_inspection_cost),
+        detailing_cost: parseJobCostValue(jobCostingFromState.detailing_cost, jobCostingFromLead.detailing_cost),
         agent_commision: parseJobCostValue(jobCostingFromState.agent_commision, jobCostingFromLead.agent_commision),
         car_recovery_cost: parseJobCostValue(jobCostingFromState.car_recovery_cost, jobCostingFromLead.car_recovery_cost),
-        other_charges: parseJobCostValue(jobCostingFromState.other_charges, jobCostingFromLead.other_charges)
+        inspection_cost: parseJobCostValue(jobCostingFromState.inspection_cost, jobCostingFromLead.inspection_cost)
     };
 
     const finalPrice = purchasedFinalPrice +
         jobCostingData.transferCost +
-        jobCostingData.detailing_inspection_cost +
+        jobCostingData.detailing_cost +
         jobCostingData.agent_commision +
         jobCostingData.car_recovery_cost +
-        jobCostingData.other_charges;
+        jobCostingData.inspection_cost;
     const remainingPurchaseAmount = finalPrice > 0 ? Math.max(finalPrice - totalAmount, 0) : null;
 
     const formatCurrency = (value) => {
@@ -899,10 +899,10 @@ const InspectionDetail = () => {
 
             const finalPriceForValidation = (isNaN(purchasedFinalPriceForValidation) ? 0 : purchasedFinalPriceForValidation) +
                 parseCost(jobCosting.transferCost || lead?.jobCosting?.transferCost) +
-                parseCost(jobCosting.detailing_inspection_cost || lead?.jobCosting?.detailing_inspection_cost) +
+                parseCost(jobCosting.detailing_cost || lead?.jobCosting?.detailing_cost) +
                 parseCost(jobCosting.agent_commision || lead?.jobCosting?.agent_commision) +
                 parseCost(jobCosting.car_recovery_cost || lead?.jobCosting?.car_recovery_cost) +
-                parseCost(jobCosting.other_charges || lead?.jobCosting?.other_charges);
+                parseCost(jobCosting.inspection_cost || lead?.jobCosting?.inspection_cost);
 
             const payload = allocations.map((allocation) => {
                 // Ownership percentage (for calculating amount)
@@ -1013,10 +1013,10 @@ const InspectionDetail = () => {
 
         return (isNaN(currentPurchasedFinalPrice) ? 0 : currentPurchasedFinalPrice) +
             parseCost(jobCosting.transferCost || lead?.jobCosting?.transferCost) +
-            parseCost(jobCosting.detailing_inspection_cost || lead?.jobCosting?.detailing_inspection_cost) +
+            parseCost(jobCosting.detailing_cost || lead?.jobCosting?.detailing_cost) +
             parseCost(jobCosting.agent_commision || lead?.jobCosting?.agent_commision) +
             parseCost(jobCosting.car_recovery_cost || lead?.jobCosting?.car_recovery_cost) +
-            parseCost(jobCosting.other_charges || lead?.jobCosting?.other_charges);
+            parseCost(jobCosting.inspection_cost || lead?.jobCosting?.inspection_cost);
     }, [priceAnalysis.purchasedFinalPrice, jobCosting, lead]);
 
 
@@ -1245,10 +1245,10 @@ const InspectionDetail = () => {
     const handleSubmitForApproval = async () => {
         // Check if job costing is complete
         const jobCostingData = lead?.jobCosting || {};
-        const needJobCosting = !jobCostingData.transferCost || !jobCostingData.detailing_inspection_cost;
+        const needJobCosting = !jobCostingData.transferCost || !jobCostingData.detailing_cost;
 
         if (user?.role === 'admin' && needJobCosting) {
-            showWarning('Please complete the job costing fields (Transfer Cost and Detailing/Inspection Cost) in the Pricing & Job Costings tab before submitting for approval.');
+            showWarning('Please complete the job costing fields (Transfer Cost and Detailing Cost) in the Pricing & Job Costings tab before submitting for approval.');
             setActiveTab('pricing');
             return;
         }
@@ -1406,10 +1406,10 @@ const InspectionDetail = () => {
                 vin: chassisNumber || null,
                 jobCosting: {
                     transferCost: jobCosting.transferCost ? parseFloat(jobCosting.transferCost) : 0,
-                    detailing_inspection_cost: jobCosting.detailing_inspection_cost ? parseFloat(jobCosting.detailing_inspection_cost) : 0,
+                    detailing_cost: jobCosting.detailing_cost ? parseFloat(jobCosting.detailing_cost) : 0,
                     agent_commision: jobCosting.agent_commision ? parseFloat(jobCosting.agent_commision) : 0,
                     car_recovery_cost: jobCosting.car_recovery_cost ? parseFloat(jobCosting.car_recovery_cost) : 0,
-                    other_charges: jobCosting.other_charges ? parseFloat(jobCosting.other_charges) : 0
+                    inspection_cost: jobCosting.inspection_cost ? parseFloat(jobCosting.inspection_cost) : 0
                 }
             });
             showSuccess('Price analysis and job costing saved successfully!');
@@ -1835,7 +1835,7 @@ const InspectionDetail = () => {
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                                    Detailing / Inspection Cost <span className="text-red-500">*</span>
+                                                    Detailing Cost <span className="text-red-500">*</span>
                                                 </label>
                                                 <div className="relative">
                                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -1843,10 +1843,10 @@ const InspectionDetail = () => {
                                                     </div>
                                                     <input
                                                         type="text"
-                                                        value={formatNumberWithCommas(jobCosting.detailing_inspection_cost)}
+                                                        value={formatNumberWithCommas(jobCosting.detailing_cost)}
                                                         onChange={(e) => {
                                                             const value = e.target.value.replace(/[^\d.]/g, '');
-                                                            setJobCosting({ ...jobCosting, detailing_inspection_cost: value });
+                                                            setJobCosting({ ...jobCosting, detailing_cost: value });
                                                         }}
                                                         onWheel={(e) => e.target.blur()}
                                                         disabled={isSubmittedForApproval()}
@@ -1913,7 +1913,7 @@ const InspectionDetail = () => {
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                                    Other Charges
+                                                    Inspection Cost
                                                 </label>
                                                 <div className="relative">
                                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -1921,10 +1921,10 @@ const InspectionDetail = () => {
                                                     </div>
                                                     <input
                                                         type="text"
-                                                        value={formatNumberWithCommas(jobCosting.other_charges)}
+                                                        value={formatNumberWithCommas(jobCosting.inspection_cost)}
                                                         onChange={(e) => {
                                                             const value = e.target.value.replace(/[^\d.]/g, '');
-                                                            setJobCosting({ ...jobCosting, other_charges: value });
+                                                            setJobCosting({ ...jobCosting, inspection_cost: value });
                                                         }}
                                                         onWheel={(e) => e.target.blur()}
                                                         disabled={isSubmittedForApproval()}

@@ -51,11 +51,11 @@ const CarDetailsPrint = () => {
     // Calculate Job Costing Total
     const jobCostingTotal = (() => {
         const transferCost = Number(lead?.jobCosting?.transferCost || 0);
-        const detailingCost = Number(lead?.jobCosting?.detailing_inspection_cost || 0);
+        const detailingCost = Number(lead?.jobCosting?.detailing_cost || 0);
         const agentCommission = Number(lead?.jobCosting?.agent_commision || 0);
         const carRecoveryCost = Number(lead?.jobCosting?.car_recovery_cost || 0);
-        const otherCharges = Number(lead?.jobCosting?.other_charges || 0);
-        return transferCost + detailingCost + agentCommission + carRecoveryCost + otherCharges;
+        const inspectionCost = Number(lead?.jobCosting?.inspection_cost || 0);
+        return transferCost + detailingCost + agentCommission + carRecoveryCost + inspectionCost;
     })();
 
     // Calculate Car Total Price (Purchased Final Price + Job Costing Total)
@@ -200,7 +200,7 @@ const CarDetailsPrint = () => {
                 )}
 
                 {/* Job Costing */}
-                {(lead?.jobCosting?.transferCost || lead?.jobCosting?.detailing_inspection_cost || lead?.jobCosting?.agent_commision || lead?.jobCosting?.car_recovery_cost || lead?.jobCosting?.other_charges || jobCostingTotal > 0) && (
+                {(lead?.jobCosting?.transferCost || lead?.jobCosting?.detailing_cost || lead?.jobCosting?.agent_commision || lead?.jobCosting?.car_recovery_cost || lead?.jobCosting?.inspection_cost || jobCostingTotal > 0) && (
                     <div className="mb-8">
                         <h2 className="text-2xl font-bold text-gray-900 mb-4 border-b-2 border-gray-300 pb-2">
                             Job Costing
@@ -214,11 +214,11 @@ const CarDetailsPrint = () => {
                                     </p>
                                 </div>
                             )}
-                            {lead?.jobCosting?.detailing_inspection_cost !== undefined && lead?.jobCosting?.detailing_inspection_cost !== null && (
+                            {lead?.jobCosting?.detailing_cost !== undefined && lead?.jobCosting?.detailing_cost !== null && (
                                 <div>
-                                    <p className="text-sm text-gray-600 mb-1">Detailing & Inspection Cost</p>
+                                    <p className="text-sm text-gray-600 mb-1">Detailing Cost</p>
                                     <p className="text-lg font-semibold text-gray-900">
-                                        AED {lead.jobCosting.detailing_inspection_cost.toLocaleString()}
+                                        AED {lead.jobCosting.detailing_cost.toLocaleString()}
                                     </p>
                                 </div>
                             )}
@@ -238,11 +238,11 @@ const CarDetailsPrint = () => {
                                     </p>
                                 </div>
                             )}
-                            {lead?.jobCosting?.other_charges !== undefined && lead?.jobCosting?.other_charges !== null && (
+                            {lead?.jobCosting?.inspection_cost !== undefined && lead?.jobCosting?.inspection_cost !== null && (
                                 <div>
-                                    <p className="text-sm text-gray-600 mb-1">Other Charges</p>
+                                    <p className="text-sm text-gray-600 mb-1">Inspection Cost</p>
                                     <p className="text-lg font-semibold text-gray-900">
-                                        AED {lead.jobCosting.other_charges.toLocaleString()}
+                                        AED {lead.jobCosting.inspection_cost.toLocaleString()}
                                     </p>
                                 </div>
                             )}

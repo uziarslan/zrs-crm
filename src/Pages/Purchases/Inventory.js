@@ -565,10 +565,10 @@ const Inventory = () => {
                           const jc = vehicle.jobCosting || {};
                           const jobTotal =
                             (jc.transferCost || 0) +
-                            (jc.detailing_inspection_cost || 0) +
+                            (jc.detailing_cost || 0) +
                             (jc.agent_commision || 0) +
                             (jc.car_recovery_cost || 0) +
-                            (jc.other_charges || 0);
+                            (jc.inspection_cost || 0);
                           return jobTotal > 0 ? `AED ${jobTotal.toLocaleString()}` : '-';
                         })()}
                       </td>
@@ -578,10 +578,10 @@ const Inventory = () => {
                           const jc = vehicle.jobCosting || {};
                           const jobTotal =
                             (jc.transferCost || 0) +
-                            (jc.detailing_inspection_cost || 0) +
+                            (jc.detailing_cost || 0) +
                             (jc.agent_commision || 0) +
                             (jc.car_recovery_cost || 0) +
-                            (jc.other_charges || 0);
+                            (jc.inspection_cost || 0);
                           const total = purchase + jobTotal;
                           return total > 0 ? `AED ${total.toLocaleString()}` : '-';
                         })()}

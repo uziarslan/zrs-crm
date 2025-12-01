@@ -222,10 +222,10 @@ const Sold = () => {
                 const jobCosting = lead.jobCosting || {};
                 const totalJobCost =
                   (jobCosting.transferCost || 0) +
-                  (jobCosting.detailing_inspection_cost || 0) +
+                  (jobCosting.detailing_cost || 0) +
                   (jobCosting.agent_commision || 0) +
                   (jobCosting.car_recovery_cost || 0) +
-                  (jobCosting.other_charges || 0);
+                  (jobCosting.inspection_cost || 0);
                 const buyingPrice = purchasePrice + totalJobCost;
 
                 const zrsProfitPercentage = purchasePrice > 0 ? ((zrsProfit / purchasePrice) * 100) : 0;
