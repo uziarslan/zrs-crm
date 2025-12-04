@@ -368,7 +368,7 @@ const InspectionDetail = () => {
         }
     };
 
-    const handleViewDocuSignDocument = useCallback(async (doc) => {
+    const handleViewZohoSignDocument = useCallback(async (doc) => {
         if (!doc?.documentId) {
             showError('Document not available');
             return;
@@ -429,7 +429,7 @@ const InspectionDetail = () => {
         }
     }, [lead?.purchaseOrder?._id, showError]);
 
-    const handleDownloadDocuSignDocument = useCallback(async (doc) => {
+    const handleDownloadZohoSignDocument = useCallback(async (doc) => {
         if (!doc?.documentId) {
             showError('Document not available');
             return;
@@ -722,19 +722,19 @@ const InspectionDetail = () => {
         }, {});
     }, [lead?.purchaseOrder?.docuSignDocuments, docuSignEnvelopeIdToInvestorMap]);
 
-    const getDocuSignEnvelopeForInvestor = useCallback((investorId) => {
+    const getZohoSignEnvelopeForInvestor = useCallback((investorId) => {
         if (!investorId) return null;
         const key = investorId?._id ? investorId._id.toString() : investorId.toString();
         return docuSignEnvelopesByInvestor[key] || null;
     }, [docuSignEnvelopesByInvestor]);
 
-    const getDocuSignDocumentsForInvestor = useCallback((investorId) => {
+    const getZohoSignDocumentsForInvestor = useCallback((investorId) => {
         if (!investorId) return [];
         const key = investorId?._id ? investorId._id.toString() : investorId.toString();
         return docuSignDocumentsByInvestor[key] || [];
     }, [docuSignDocumentsByInvestor]);
 
-    const getDocuSignStatusMeta = useCallback((status) => {
+    const getZohoSignStatusMeta = useCallback((status) => {
         if (!status) return null;
         const normalized = status.toLowerCase();
         const statusConfig = {
@@ -759,7 +759,7 @@ const InspectionDetail = () => {
             created: {
                 label: 'Draft',
                 tone: 'default',
-                description: 'Envelope prepared in DocuSign.'
+                description: 'Envelope prepared in Zoho Sign.'
             },
             declined: {
                 label: 'Declined',
@@ -1224,9 +1224,9 @@ const InspectionDetail = () => {
 
     const isSubmittedForApproval = () => (lead?.approval?.status === 'pending' || lead?.approval?.status === 'approved');
     const isDualApproved = () => lead?.approval?.status === 'approved';
-    const isDocuSignSent = () => lead?.purchaseOrder?.docuSignEnvelopeId && lead?.purchaseOrder?.docuSignStatus && !isDocuSignFailed();
-    const isDocuSignCompleted = () => lead?.purchaseOrder?.docuSignStatus === 'completed';
-    const isDocuSignFailed = () => lead?.purchaseOrder?.docuSignStatus === 'failed' || lead?.purchaseOrder?.docuSignStatus === 'voided';
+    const isZohoSignSent = () => lead?.purchaseOrder?.docuSignEnvelopeId && lead?.purchaseOrder?.docuSignStatus && !isZohoSignFailed();
+    const isZohoSignCompleted = () => lead?.purchaseOrder?.docuSignStatus === 'completed';
+    const isZohoSignFailed = () => lead?.purchaseOrder?.docuSignStatus === 'failed' || lead?.purchaseOrder?.docuSignStatus === 'voided';
 
     const isLeadConverted = () => lead?.status === 'converted';
 
@@ -2350,13 +2350,13 @@ const InspectionDetail = () => {
                                                         const details = getInvestorDetails(allocation.investorId);
                                                         const { min, max } = getInvestorRange(allocation.investorId);
                                                         const fundingStats = getInvestorFundingStats(allocation.investorId, allocation.amount);
-                                                        const envelope = getDocuSignEnvelopeForInvestor(allocation.investorId);
-                                                        const docuSignStatusMeta = getDocuSignStatusMeta(envelope?.status);
+                                const envelope = getZohoSignEnvelopeForInvestor(allocation.investorId);
+                                                        const docuSignStatusMeta = getZohoSignStatusMeta(envelope?.status);
                                                         const sentAtText = envelope?.sentAt ? `Sent ${formatDateTime(envelope.sentAt)}` : null;
                                                         const completedAtText = docuSignStatusMeta?.normalized === 'completed'
                                                             ? formatDateTime(envelope?.completedAt || lead?.purchaseOrder?.docuSignSignedAt)
                                                             : null;
-                                                        const docuSignDocs = getDocuSignDocumentsForInvestor(allocation.investorId);
+                                                        const docuSignDocs = getZohoSignDocumentsForInvestor(allocation.investorId);
 
                                                         return (
                                                             <div
@@ -2383,7 +2383,7 @@ const InspectionDetail = () => {
                                                                             </div>
                                                                             <div className="text-right">
                                                                                 <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                                                                                    DocuSign
+                                                                                    Zoho Sign
                                                                                 </div>
                                                                                 {docuSignStatusMeta ? (
                                                                                     <div className="flex flex-col items-start gap-1 lg:items-end">
@@ -2438,7 +2438,7 @@ const InspectionDetail = () => {
                                                                                             </div>
                                                                                             <div className="flex items-center gap-2">
                                                                                                 <button
-                                                                                                    onClick={() => handleViewDocuSignDocument(doc)}
+                                                                                                    onClick={() => handleViewZohoSignDocument(doc)}
                                                                                                     disabled={isViewing || isDownloading}
                                                                                                     className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                                                                 >
@@ -2455,7 +2455,7 @@ const InspectionDetail = () => {
                                                                                                     )}
                                                                                                 </button>
                                                                                                 <button
-                                                                                                    onClick={() => handleDownloadDocuSignDocument(doc)}
+                                                                                                    onClick={() => handleDownloadZohoSignDocument(doc)}
                                                                                                     disabled={isDownloading}
                                                                                                     className="px-3 py-1.5 text-xs font-medium text-green-600 bg-green-50 hover:bg-green-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                                                                                 >
@@ -2699,7 +2699,7 @@ const InspectionDetail = () => {
                                         </div>
                                     )}
 
-                                    {!isDocuSignCompleted() && (
+                                    {!isZohoSignCompleted() && (
                                         <div className="bg-white rounded-lg border border-gray-200 p-4 flex flex-col md:flex-row items-stretch md:items-center gap-3 md:gap-4 justify-between">
                                             <div className="text-sm text-gray-700">
                                                 {isSubmittedForApproval() ? 'This lead has been submitted for approval.' : 'Ready to submit for approval.'}
@@ -2732,13 +2732,13 @@ const InspectionDetail = () => {
                                                         {declining ? 'Declining...' : 'Decline'}
                                                     </button>
                                                 )}
-                                                {isDualApproved() && !isDocuSignSent() && (
-                                                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">Ready for DocuSign</span>
+                                                {isDualApproved() && !isZohoSignSent() && (
+                                                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">Ready for Zoho Sign</span>
                                                 )}
-                                                {isDocuSignSent() && !isDocuSignCompleted() && (
+                                                {isZohoSignSent() && !isZohoSignCompleted() && (
                                                     <span className="inline-flex items-center px-3 py-1 rounded-full bg-yellow-100 text-yellow-800 text-xs font-semibold">Awaiting Signature</span>
                                                 )}
-                                                {isDocuSignCompleted() && !isLeadConverted() && (
+                                                {isZohoSignCompleted() && !isLeadConverted() && (
                                                     <span className="inline-flex items-center px-3 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-semibold">Signed</span>
                                                 )}
                                                 {isLeadConverted() && (
@@ -2973,7 +2973,7 @@ const InspectionDetail = () => {
                 {/* Sidebar */}
                 <div className="space-y-6">
                     {/* Agreement Signed Card */}
-                    {isDocuSignCompleted() && !isLeadConverted() && (
+                    {isZohoSignCompleted() && !isLeadConverted() && (
                         <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg shadow-lg p-6 text-white space-y-4">
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="flex-shrink-0 w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center">

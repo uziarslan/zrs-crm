@@ -114,7 +114,7 @@ const PurchaseOrders = () => {
                 <div className="text-lg font-bold">{po.approvedBy?.length || 0} / 2</div>
               </div>
               <div>
-                <div className="text-sm text-gray-600">DocuSign Status</div>
+                <div className="text-sm text-gray-600">Zoho Sign Status</div>
                 <div className="text-sm font-medium capitalize">{po.docuSignStatus || 'Not sent'}</div>
               </div>
             </div>
