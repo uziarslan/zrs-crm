@@ -15,6 +15,7 @@ import AdminManagers from './Pages/Admin/Managers';
 import AdminInvestors from './Pages/Admin/Investors';
 import AdminLeadDetail from './Pages/Admin/LeadDetail';
 import AuditLogs from './Pages/Admin/AuditLogs';
+import Profile from './Pages/Admin/Profile';
 
 // Manager Pages
 import ManagerDashboard from './Pages/Manager/Dashboard';
@@ -99,6 +100,14 @@ function App() {
                         element={
                             <PrivateRoute roles={['admin']}>
                                 <AdminLeadDetail />
+                            </PrivateRoute>
+                        }
+                    />
+                    <Route
+                        path="/admin/profile"
+                        element={
+                            <PrivateRoute roles={['admin']}>
+                                <Profile />
                             </PrivateRoute>
                         }
                     />

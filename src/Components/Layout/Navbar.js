@@ -54,11 +54,12 @@ const Navbar = () => {
             }
         };
 
-        document.addEventListener('mousedown', handleClickOutside);
+        // Use click instead of mousedown to allow menu item clicks to register first
+        document.addEventListener('click', handleClickOutside);
         document.addEventListener('click', handleMobileMenuClickOutside);
         
         return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('click', handleClickOutside);
             document.removeEventListener('click', handleMobileMenuClickOutside);
             // Clean up timeouts on unmount
             if (usersDropdownTimeoutRef.current) {
@@ -279,7 +280,10 @@ const Navbar = () => {
                         {/* Desktop User Menu */}
                         <div className="hidden lg:block relative" ref={menuRef}>
                             <button
-                                onClick={() => setShowUserMenu(!showUserMenu)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowUserMenu(!showUserMenu);
+                                }}
                                 className="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
                             >
                                 <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center text-white font-semibold shadow-sm">
@@ -302,7 +306,11 @@ const Navbar = () => {
                             </button>
 
                             {showUserMenu && (
-                                <div className="absolute right-0 mt-2 w-64 rounded-lg shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50 overflow-hidden">
+                                <div 
+                                    className="absolute right-0 mt-2 w-64 rounded-lg shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50 overflow-hidden"
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => e.stopPropagation()}
+                                >
                                     <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
                                         <div className="flex items-center space-x-3">
                                             <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary-600 to-primary-700 flex items-center justify-center text-white font-semibold">
@@ -316,8 +324,23 @@ const Navbar = () => {
                                         </div>
                                     </div>
                                     <div className="py-1">
+                                        {user?.role === 'admin' && (
+                                            <Link
+                                                to="/admin/profile"
+                                                className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors flex items-center space-x-2"
+                                                onClick={() => setShowUserMenu(false)}
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                </svg>
+                                                <span>Profile</span>
+                                            </Link>
+                                        )}
                                         <button
-                                            onClick={handleLogout}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleLogout();
+                                            }}
                                             className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center space-x-2"
                                         >
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -354,6 +377,18 @@ const Navbar = () => {
                                         </div>
                                     </div>
                                     <div className="py-1">
+                                        {user?.role === 'admin' && (
+                                            <Link
+                                                to="/admin/profile"
+                                                className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-primary-600 transition-colors flex items-center space-x-2"
+                                                onClick={() => setShowUserMenu(false)}
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                </svg>
+                                                <span>Profile</span>
+                                            </Link>
+                                        )}
                                         <button
                                             onClick={handleLogout}
                                             className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-600 transition-colors flex items-center space-x-2"
