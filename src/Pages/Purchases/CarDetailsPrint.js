@@ -55,7 +55,8 @@ const CarDetailsPrint = () => {
         const agentCommission = Number(lead?.jobCosting?.agent_commision || 0);
         const carRecoveryCost = Number(lead?.jobCosting?.car_recovery_cost || 0);
         const inspectionCost = Number(lead?.jobCosting?.inspection_cost || 0);
-        return transferCost + detailingCost + agentCommission + carRecoveryCost + inspectionCost;
+        const additionalAmount = Number(lead?.jobCosting?.additionalAmount || 0);
+        return transferCost + detailingCost + agentCommission + carRecoveryCost + inspectionCost + additionalAmount;
     })();
 
     // Calculate Car Total Price (Purchased Final Price + Job Costing Total)
@@ -200,7 +201,7 @@ const CarDetailsPrint = () => {
                 )}
 
                 {/* Job Costing */}
-                {(lead?.jobCosting?.transferCost || lead?.jobCosting?.detailing_cost || lead?.jobCosting?.agent_commision || lead?.jobCosting?.car_recovery_cost || lead?.jobCosting?.inspection_cost || jobCostingTotal > 0) && (
+                {(lead?.jobCosting?.transferCost || lead?.jobCosting?.detailing_cost || lead?.jobCosting?.agent_commision || lead?.jobCosting?.car_recovery_cost || lead?.jobCosting?.inspection_cost || lead?.jobCosting?.additionalAmount || jobCostingTotal > 0) && (
                     <div className="mb-8">
                         <h2 className="text-2xl font-bold text-gray-900 mb-4 border-b-2 border-gray-300 pb-2">
                             Job Costing
@@ -243,6 +244,14 @@ const CarDetailsPrint = () => {
                                     <p className="text-sm text-gray-600 mb-1">Inspection Cost</p>
                                     <p className="text-lg font-semibold text-gray-900">
                                         AED {lead.jobCosting.inspection_cost.toLocaleString()}
+                                    </p>
+                                </div>
+                            )}
+                            {lead?.jobCosting?.additionalAmount !== undefined && lead?.jobCosting?.additionalAmount !== null && lead?.jobCosting?.additionalAmount > 0 && (
+                                <div>
+                                    <p className="text-sm text-gray-600 mb-1">Additional Amount</p>
+                                    <p className="text-lg font-semibold text-gray-900">
+                                        AED {lead.jobCosting.additionalAmount.toLocaleString()}
                                     </p>
                                 </div>
                             )}

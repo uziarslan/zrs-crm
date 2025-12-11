@@ -199,23 +199,21 @@ const AdminDashboard = () => {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                     {notification.show && (
                         <div
-                            className={`mb-4 border-l-4 p-4 rounded-r-lg ${
-                                notification.type === 'success'
+                            className={`mb-4 border-l-4 p-4 rounded-r-lg ${notification.type === 'success'
                                     ? 'bg-green-50 border-green-400'
                                     : notification.type === 'warning'
                                         ? 'bg-yellow-50 border-yellow-400'
                                         : 'bg-red-50 border-red-400'
-                            }`}
+                                }`}
                         >
                             <div className="flex items-center justify-between">
                                 <p
-                                    className={`text-sm ${
-                                        notification.type === 'success'
+                                    className={`text-sm ${notification.type === 'success'
                                             ? 'text-green-700'
                                             : notification.type === 'warning'
                                                 ? 'text-yellow-700'
                                                 : 'text-red-700'
-                                    }`}
+                                        }`}
                                 >
                                     {notification.message}
                                 </p>
@@ -256,23 +254,21 @@ const AdminDashboard = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
                 {notification.show && (
                     <div
-                        className={`mb-4 border-l-4 p-4 rounded-r-lg ${
-                            notification.type === 'success'
+                        className={`mb-4 border-l-4 p-4 rounded-r-lg ${notification.type === 'success'
                                 ? 'bg-green-50 border-green-400'
                                 : notification.type === 'warning'
                                     ? 'bg-yellow-50 border-yellow-400'
                                     : 'bg-red-50 border-red-400'
-                        }`}
+                            }`}
                     >
                         <div className="flex items-center justify-between">
                             <p
-                                className={`text-sm ${
-                                    notification.type === 'success'
+                                className={`text-sm ${notification.type === 'success'
                                         ? 'text-green-700'
                                         : notification.type === 'warning'
                                             ? 'text-yellow-700'
                                             : 'text-red-700'
-                                }`}
+                                    }`}
                             >
                                 {notification.message}
                             </p>
@@ -442,6 +438,12 @@ const AdminDashboard = () => {
                             <span className="text-gray-600">Total Profit:</span>
                             <span className="font-bold text-green-600">
                                 AED {stats?.sales?.totalProfit?.toLocaleString() || 0}
+                            </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-600">ZRS Profit:</span>
+                            <span className="font-bold text-primary-600">
+                                AED {stats?.sales?.totalZrsProfit?.toLocaleString() || 0}
                             </span>
                         </div>
                     </div>

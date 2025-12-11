@@ -605,7 +605,7 @@ const InspectionDetail = () => {
     const isPriceAnalysisComplete = () => {
         const pa = lead?.priceAnalysis || {};
         const jc = lead?.jobCosting || {};
-        return Boolean(pa.minSellingPrice && pa.maxSellingPrice && pa.purchasedFinalPrice && jc.transferCost && jc.detailing_cost);
+        return Boolean(pa.minSellingPrice && pa.maxSellingPrice && pa.purchasedFinalPrice && jc.transferCost);
     };
 
     const getInvestorDetails = useCallback((investorId) => {
@@ -1245,10 +1245,10 @@ const InspectionDetail = () => {
     const handleSubmitForApproval = async () => {
         // Check if job costing is complete
         const jobCostingData = lead?.jobCosting || {};
-        const needJobCosting = !jobCostingData.transferCost || !jobCostingData.detailing_cost;
+        const needJobCosting = !jobCostingData.transferCost;
 
         if (user?.role === 'admin' && needJobCosting) {
-            showWarning('Please complete the job costing fields (Transfer Cost and Detailing Cost) in the Pricing & Job Costings tab before submitting for approval.');
+            showWarning('Please complete the job costing field (Transfer Cost) in the Pricing & Job Costings tab before submitting for approval.');
             setActiveTab('pricing');
             return;
         }
@@ -1835,7 +1835,7 @@ const InspectionDetail = () => {
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                                    Detailing Cost <span className="text-red-500">*</span>
+                                                    Detailing Cost
                                                 </label>
                                                 <div className="relative">
                                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -2350,7 +2350,7 @@ const InspectionDetail = () => {
                                                         const details = getInvestorDetails(allocation.investorId);
                                                         const { min, max } = getInvestorRange(allocation.investorId);
                                                         const fundingStats = getInvestorFundingStats(allocation.investorId, allocation.amount);
-                                const envelope = getZohoSignEnvelopeForInvestor(allocation.investorId);
+                                                        const envelope = getZohoSignEnvelopeForInvestor(allocation.investorId);
                                                         const docuSignStatusMeta = getZohoSignStatusMeta(envelope?.status);
                                                         const sentAtText = envelope?.sentAt ? `Sent ${formatDateTime(envelope.sentAt)}` : null;
                                                         const completedAtText = docuSignStatusMeta?.normalized === 'completed'

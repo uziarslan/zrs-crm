@@ -184,7 +184,8 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
       (jc.detailing_cost || 0) +
       (jc.agent_commision || 0) +
       (jc.car_recovery_cost || 0) +
-      (jc.inspection_cost || 0);
+      (jc.inspection_cost || 0) +
+      (jc.additionalAmount || 0);
     return purchase + jobTotal;
   };
 
@@ -360,6 +361,28 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
     return Number.isFinite(parsed) ? parsed : 0;
   };
 
+  const formatCurrencyInput = (value) => {
+    if (value === '' || value === null || value === undefined) return '';
+    // Remove all non-numeric characters except decimal point
+    const numericString = String(value).replace(/[^\d.]/g, '');
+
+    // Handle empty string
+    if (numericString === '') return '';
+
+    // Split into integer and decimal parts
+    const parts = numericString.split('.');
+    const integerPart = parts[0] || '';
+    const decimalPart = parts[1] !== undefined ? '.' + parts[1] : '';
+
+    // Format integer part with commas
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+    // Limit decimal part to 2 digits
+    const limitedDecimal = decimalPart.length > 3 ? decimalPart.substring(0, 3) : decimalPart;
+
+    return formattedInteger + limitedDecimal;
+  };
+
   const sellOrderTotals = useMemo(() => {
     const selling = parseNumericInput(sellOrderForm.sellingPrice);
     const transferCost = parseNumericInput(sellOrderForm.transferCostAmount);
@@ -367,7 +390,13 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
     const bankFee = parseNumericInput(sellOrderForm.bankFinanceFee);
     const inspectionCost = parseNumericInput(sellOrderForm.inspectionCost);
     const booking = parseNumericInput(sellOrderForm.bookingAmount);
-    const total = selling + transferCost + insurance + bankFee + inspectionCost;
+
+    // If transferCost is excluded, add it to total; if included, it's already in sellingPrice
+    const transferCostToAdd = sellOrderForm.transferCostInclusion === 'excluded' ? transferCost : 0;
+    // If insurance is excluded, add it to total; if included, it's already in sellingPrice
+    const insuranceToAdd = sellOrderForm.insuranceInclusion === 'excluded' ? insurance : 0;
+
+    const total = selling + transferCostToAdd + insuranceToAdd + bankFee + inspectionCost;
     return {
       totalPayable: total,
       balanceDue: Math.max(total - booking, 0)
@@ -513,7 +542,8 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
 
   const [sellInvoiceForm, setSellInvoiceForm] = useState({
     balancePaymentReceived: '',
-    paymentMode: 'Cash'
+    paymentMode: 'Cash',
+    additionalAmount: ''
   });
 
   const openSellInvoiceModal = () => {
@@ -521,8 +551,9 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
     const sellOrder = lead.sellOrder;
     setSellInvoiceError('');
     setSellInvoiceForm({
-      balancePaymentReceived: sellOrder.balanceAmount ? String(sellOrder.balanceAmount) : '',
-      paymentMode: sellOrder.paymentMode || 'Cash'
+      balancePaymentReceived: sellOrder.balanceAmount ? formatCurrencyInput(String(sellOrder.balanceAmount)) : '',
+      paymentMode: sellOrder.paymentMode || 'Cash',
+      additionalAmount: lead?.jobCosting?.additionalAmount ? formatCurrencyInput(String(lead.jobCosting.additionalAmount)) : ''
     });
     setShowSellInvoiceModal(true);
   };
@@ -530,14 +561,29 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
   const closeSellInvoiceModal = () => {
     if (sellInvoiceSubmitting) return;
     setShowSellInvoiceModal(false);
+    setSellInvoiceForm({
+      balancePaymentReceived: '',
+      paymentMode: 'Cash',
+      additionalAmount: ''
+    });
   };
 
   const handleSellInvoiceInputChange = (event) => {
     const { name, value } = event.target;
-    setSellInvoiceForm((prev) => ({
-      ...prev,
-      [name]: value
-    }));
+
+    // Format currency fields (balancePaymentReceived and additionalAmount) with commas
+    if (name === 'balancePaymentReceived' || name === 'additionalAmount') {
+      const formattedValue = formatCurrencyInput(value);
+      setSellInvoiceForm((prev) => ({
+        ...prev,
+        [name]: formattedValue
+      }));
+    } else {
+      setSellInvoiceForm((prev) => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
   const handleSellInvoiceSubmit = async (event) => {
@@ -548,7 +594,8 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
     try {
       const payload = {
         balancePaymentReceived: parseNumericInput(sellInvoiceForm.balancePaymentReceived),
-        paymentMode: sellInvoiceForm.paymentMode
+        paymentMode: sellInvoiceForm.paymentMode,
+        additionalAmount: parseNumericInput(sellInvoiceForm.additionalAmount) || 0
       };
 
       const response = await axiosInstance.post(`/sell-invoice/${lead._id}`, payload);
@@ -564,6 +611,11 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
 
       showSuccess('Sell Invoice generated successfully. Vehicle marked as sold.');
       setShowSellInvoiceModal(false);
+      setSellInvoiceForm({
+        balancePaymentReceived: '',
+        paymentMode: 'Cash',
+        additionalAmount: ''
+      });
       await fetchLead();
     } catch (err) {
       setSellInvoiceError(err.response?.data?.message || 'Failed to generate Sell Invoice');
@@ -677,7 +729,7 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
     priceAnalysisData.purchasedFinalPrice !== undefined && priceAnalysisData.purchasedFinalPrice !== null
       ? toNumberValue(priceAnalysisData.purchasedFinalPrice)
       : null;
-  const jobCostingTotalValue = ['transferCost', 'detailing_cost', 'agent_commision', 'car_recovery_cost', 'inspection_cost'].reduce(
+  const jobCostingTotalValue = ['transferCost', 'detailing_cost', 'agent_commision', 'car_recovery_cost', 'inspection_cost', 'additionalAmount'].reduce(
     (sum, key) => sum + toNumberValue(jobCostingData[key]),
     0
   );
@@ -2436,6 +2488,23 @@ const SalesLeadDetail = ({ isSoldView = false }) => {
                     <option value="Finance">Finance</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">
+                  Additional Amount (AED)
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  name="additionalAmount"
+                  value={sellInvoiceForm.additionalAmount}
+                  onWheel={(event) => event.currentTarget.blur()}
+                  onChange={handleSellInvoiceInputChange}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 number-input-no-spin"
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-gray-500 mt-1">Enter any additional amount to be added to job costing</p>
               </div>
 
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">

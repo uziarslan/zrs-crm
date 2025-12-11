@@ -165,7 +165,8 @@ const SalesLeads = () => {
                       (jc.detailing_cost || 0) +
                       (jc.agent_commision || 0) +
                       (jc.car_recovery_cost || 0) +
-                      (jc.inspection_cost || 0);
+                      (jc.inspection_cost || 0) +
+                      (jc.additionalAmount || 0);
                     const total = purchase + jobTotal;
                     return total > 0 ? `AED ${total.toLocaleString()}` : '-';
                   })()}

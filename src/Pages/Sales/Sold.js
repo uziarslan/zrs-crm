@@ -202,34 +202,17 @@ const Sold = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {leads.map((lead) => {
                 const sellInvoice = lead.sellInvoice || {};
-                const zrsProfit = Number(sellInvoice.zrsProfit || 0);
-                const isConsignment = lead.type === 'consignment';
 
-                // For consignment: use ownerProfit, for purchase: sum investor profits
-                let otherPartyProfit = 0;
-                if (isConsignment) {
-                  otherPartyProfit = Number(sellInvoice.ownerProfit || 0);
-                } else {
-                  const investorBreakdown = sellInvoice.investorBreakdown || [];
-                  otherPartyProfit = investorBreakdown.reduce((sum, inv) => {
-                    const profit = Number(inv.profitAmount || 0);
-                    return sum + profit;
-                  }, 0);
-                }
+                // Always use backend-calculated values (backend always calculates for sold leads)
+                const buyingPrice = lead.calculatedBuyingPrice || 0;
+                const zrsProfit = lead.calculatedZrsProfit !== undefined ? lead.calculatedZrsProfit : 0;
+                const otherPartyProfit = lead.calculatedOtherPartyProfit !== undefined ? lead.calculatedOtherPartyProfit : 0;
 
                 const sellingPrice = lead.soldPrice || sellInvoice.sellingPrice || 0;
-                const purchasePrice = lead.priceAnalysis?.purchasedFinalPrice || 0;
-                const jobCosting = lead.jobCosting || {};
-                const totalJobCost =
-                  (jobCosting.transferCost || 0) +
-                  (jobCosting.detailing_cost || 0) +
-                  (jobCosting.agent_commision || 0) +
-                  (jobCosting.car_recovery_cost || 0) +
-                  (jobCosting.inspection_cost || 0);
-                const buyingPrice = purchasePrice + totalJobCost;
 
-                const zrsProfitPercentage = purchasePrice > 0 ? ((zrsProfit / purchasePrice) * 100) : 0;
-                const otherPartyProfitPercentage = purchasePrice > 0 ? ((otherPartyProfit / purchasePrice) * 100) : 0;
+                // Calculate profit percentages based on buyingPrice (total cost)
+                const zrsProfitPercentage = buyingPrice > 0 ? ((zrsProfit / buyingPrice) * 100) : 0;
+                const otherPartyProfitPercentage = buyingPrice > 0 ? ((otherPartyProfit / buyingPrice) * 100) : 0;
                 const soldDate = sellInvoice.createdAt || lead.updatedAt || lead.createdAt;
 
                 return (

@@ -1244,7 +1244,8 @@ const InventoryDetail = () => {
                                                                         (jc.detailing_cost || 0) +
                                                                         (jc.agent_commision || 0) +
                                                                         (jc.car_recovery_cost || 0) +
-                                                                        (jc.inspection_cost || 0);
+                                                                        (jc.inspection_cost || 0) +
+                                                                        (jc.additionalAmount || 0);
                                                                     const purchase = vehicle.purchasePrice || 0;
                                                                     const grandTotal = purchase + jobTotal;
                                                                     return `AED ${grandTotal.toLocaleString()}`;
