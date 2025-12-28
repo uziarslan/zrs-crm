@@ -184,7 +184,8 @@ const InspectionDetail = () => {
                         investorId: allocation.investorId?._id || allocation.investorId,
                         ownershipPercentage: allocation.ownershipPercentage != null ? allocation.ownershipPercentage.toString() : (allocation.percentage != null ? allocation.percentage.toString() : ''),
                         amount: allocation.amount != null ? allocation.amount.toString() : '',
-                        profitPercentage: allocation.profitPercentage != null ? allocation.profitPercentage.toString() : ''
+                        profitPercentage: allocation.profitPercentage != null ? allocation.profitPercentage.toString() : '',
+                        vehicleUnderInvestorName: allocation.vehicleUnderInvestorName || false
                     }))
                 );
             } else {
@@ -944,7 +945,8 @@ const InspectionDetail = () => {
                     investorId: allocation.investorId,
                     ownershipPercentage,
                     amount,
-                    profitPercentage: allocation.profitPercentage != null && allocation.profitPercentage !== '' ? parseFloat(allocation.profitPercentage) : undefined
+                    profitPercentage: allocation.profitPercentage != null && allocation.profitPercentage !== '' ? parseFloat(allocation.profitPercentage) : undefined,
+                    vehicleUnderInvestorName: allocation.vehicleUnderInvestorName || false
                 };
             });
 
@@ -957,11 +959,12 @@ const InspectionDetail = () => {
             }
 
             await axiosInstance.put(`/purchases/leads/${id}/investor`, {
-                investorAllocations: payload.map(({ investorId, ownershipPercentage, amount, profitPercentage }) => ({
+                investorAllocations: payload.map(({ investorId, ownershipPercentage, amount, profitPercentage, vehicleUnderInvestorName }) => ({
                     investorId,
                     ownershipPercentage,
                     amount,
-                    profitPercentage: profitPercentage !== undefined ? profitPercentage : null
+                    profitPercentage: profitPercentage !== undefined ? profitPercentage : null,
+                    vehicleUnderInvestorName: vehicleUnderInvestorName || false
                 }))
             });
             setLead((prev) => {
@@ -1019,6 +1022,24 @@ const InspectionDetail = () => {
             parseCost(jobCosting.inspection_cost || lead?.jobCosting?.inspection_cost);
     }, [priceAnalysis.purchasedFinalPrice, jobCosting, lead]);
 
+
+    const handleToggleVehicleUnderInvestorName = (investorId, enabled) => {
+        // Normalize investorId for comparison (handle both object and string)
+        const normalizedId = investorId?._id ? investorId._id.toString() : investorId?.toString();
+        
+        const updated = investorAllocations.map((allocation) => {
+            const allocationId = allocation.investorId?._id ? allocation.investorId._id.toString() : allocation.investorId?.toString();
+            
+            if (allocationId === normalizedId) {
+                return { ...allocation, vehicleUnderInvestorName: enabled };
+            } else {
+                // If enabling for this investor, disable for all others (mutual exclusivity)
+                return enabled ? { ...allocation, vehicleUnderInvestorName: false } : allocation;
+            }
+        });
+        setInvestorAllocations(updated);
+        saveInvestorAllocations(updated);
+    };
 
     const handleRemoveInvestor = (investorId) => {
         // Normalize investorId for comparison (handle both object and string)
@@ -1141,7 +1162,8 @@ const InspectionDetail = () => {
                 ownershipPercentage: ownershipPercentageValue.toString(),
                 percentage: ownershipPercentageValue.toString(), // Keep for backward compatibility
                 amount: amountValue.toString(),
-                profitPercentage: profitPercentageValue.toString()
+                profitPercentage: profitPercentageValue.toString(),
+                vehicleUnderInvestorName: false // Always false when adding new investor
             }
         ];
 
@@ -2542,6 +2564,35 @@ const InspectionDetail = () => {
                                                                                 </div>
                                                                             </div>
                                                                         ))}
+                                                                    </div>
+
+                                                                    {/* Vehicle in Investor Name Toggle */}
+                                                                    <div className="border-t border-gray-100 pt-4">
+                                                                        <div className="flex items-center justify-between">
+                                                                            <div>
+                                                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                                                    Vehicle in Investor Name
+                                                                                </label>
+                                                                                <p className="text-xs text-gray-500">
+                                                                                    {allocation.vehicleUnderInvestorName 
+                                                                                        ? 'Vehicle will be registered under investor name'
+                                                                                        : 'Vehicle will be registered under company/authorized person name'}
+                                                                                </p>
+                                                                            </div>
+                                                                            <label className="relative inline-flex items-center cursor-pointer">
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={allocation.vehicleUnderInvestorName || false}
+                                                                                    onChange={(e) => {
+                                                                                        const enabled = e.target.checked;
+                                                                                        handleToggleVehicleUnderInvestorName(allocation.investorId, enabled);
+                                                                                    }}
+                                                                                    disabled={isSubmittedForApproval()}
+                                                                                    className="sr-only peer disabled:cursor-not-allowed"
+                                                                                />
+                                                                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
+                                                                            </label>
+                                                                        </div>
                                                                     </div>
 
                                                                     {!isSubmittedForApproval() && (
