@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardLayout from '../../Components/Layout/DashboardLayout';
 import axiosInstance from '../../services/axiosInstance';
+import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
@@ -16,13 +17,26 @@ const AdminDashboard = () => {
     const [searchLoading, setSearchLoading] = useState(false);
     const [isSearchFocused, setIsSearchFocused] = useState(false);
     const searchRef = useRef(null);
+    const tableRef = useRef(null);
     const [notification, setNotification] = useState({ show: false, type: 'success', message: '' });
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 5;
+    const [monthlyTrendView, setMonthlyTrendView] = useState('months'); // 'months' or 'year'
+    const [yearlyOverviewView, setYearlyOverviewView] = useState('year'); // 'year' or 'months'
+    const [salesCountView, setSalesCountView] = useState('months'); // 'months' or 'year'
+    const [selectedMonthRange, setSelectedMonthRange] = useState({ start: '', end: '' });
+    const [selectedYearRange, setSelectedYearRange] = useState({ start: '', end: '' });
 
     useEffect(() => {
         fetchDashboardStats();
         fetchAdmins();
         fetchGroups();
     }, []);
+
+    // Reset to page 1 when inventory data changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [stats?.inventory?.recentItems]);
 
     const showNotification = useCallback((type, message) => {
         setNotification({ show: true, type, message });
@@ -424,31 +438,652 @@ const AdminDashboard = () => {
                 <StatCard title="Total Sales" value={stats?.sales?.totalSales || 0} color="yellow" />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {/* Enhanced Sales Performance Section */}
+            <div className="mb-8">
                 <div className="bg-white p-6 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold mb-4">Sales Performance</h3>
-                    <div className="space-y-3">
-                        <div className="flex justify-between">
-                            <span className="text-gray-600">Total Revenue:</span>
-                            <span className="font-bold text-green-600">
-                                AED {stats?.sales?.totalRevenue?.toLocaleString() || 0}
-                            </span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-gray-600">Total Profit:</span>
-                            <span className="font-bold text-green-600">
-                                AED {stats?.sales?.totalProfit?.toLocaleString() || 0}
-                            </span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-gray-600">ZRS Profit:</span>
-                            <span className="font-bold text-primary-600">
-                                AED {stats?.sales?.totalZrsProfit?.toLocaleString() || 0}
-                            </span>
+                    <div className="flex items-center justify-between mb-6">
+                        <h3 className="text-xl font-bold text-gray-900">Sales Performance</h3>
+                        <div className="flex gap-4">
+                            <div className="text-right">
+                                <div className="text-xs text-gray-500">Total Revenue</div>
+                                <div className="text-lg font-bold text-green-600">
+                                    AED {stats?.sales?.totalRevenue?.toLocaleString() || 0}
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-xs text-gray-500">Total Profit</div>
+                                <div className="text-lg font-bold text-green-600">
+                                    AED {stats?.sales?.totalProfit?.toLocaleString() || 0}
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-xs text-gray-500">ZRS Profit</div>
+                                <div className="text-lg font-bold text-primary-600">
+                                    AED {stats?.sales?.totalZrsProfit?.toLocaleString() || 0}
+                                </div>
+                            </div>
                         </div>
                     </div>
-                </div>
 
+                    {/* Last Month Comparison */}
+                    {stats?.sales?.lastMonth && (
+                        <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Last Month Performance</h4>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <div className="text-xs text-gray-600 mb-1">Revenue</div>
+                                    <div className="text-lg font-bold text-blue-700">
+                                        AED {stats.sales.lastMonth.revenue?.toLocaleString() || 0}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs text-gray-600 mb-1">Profit</div>
+                                    <div className="text-lg font-bold text-green-700">
+                                        AED {stats.sales.lastMonth.profit?.toLocaleString() || 0}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs text-gray-600 mb-1">ZRS Profit</div>
+                                    <div className="text-lg font-bold text-purple-700">
+                                        AED {stats.sales.lastMonth.zrsProfit?.toLocaleString() || 0}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Monthly Trend Chart */}
+                    {stats?.sales?.monthly && stats.sales.monthly.length > 0 && (() => {
+                        let chartData = [];
+                        let chartTitle = '';
+
+                        if (monthlyTrendView === 'months') {
+                            // Filter by month range if selected
+                            let filteredMonthly = stats.sales.monthly;
+                            if (selectedMonthRange.start && selectedMonthRange.end) {
+                                filteredMonthly = stats.sales.monthly.filter(item => {
+                                    return item.month >= selectedMonthRange.start && item.month <= selectedMonthRange.end;
+                                });
+                            }
+
+                            chartData = filteredMonthly.map(item => {
+                                try {
+                                    const dateStr = item.month && item.month.includes('-') ? item.month + '-01' : item.month;
+                                    const date = new Date(dateStr);
+                                    const monthLabel = isNaN(date.getTime()) 
+                                        ? item.month 
+                                        : date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                                    return {
+                                        period: monthLabel,
+                                        revenue: Math.round(item.revenue || 0),
+                                        profit: Math.round(item.profit || 0),
+                                        zrsProfit: Math.round(item.zrsProfit || 0),
+                                        sales: item.sales || 0
+                                    };
+                                } catch (e) {
+                                    return {
+                                        period: item.month || 'Unknown',
+                                        revenue: Math.round(item.revenue || 0),
+                                        profit: Math.round(item.profit || 0),
+                                        zrsProfit: Math.round(item.zrsProfit || 0),
+                                        sales: item.sales || 0
+                                    };
+                                }
+                            });
+                            chartTitle = selectedMonthRange.start && selectedMonthRange.end 
+                                ? 'Monthly Trend (Selected Range)' 
+                                : 'Monthly Trend (Last 12 Months)';
+                        } else {
+                            // Yearly view
+                            let filteredYearly = stats.sales.yearly || [];
+                            if (selectedYearRange.start && selectedYearRange.end) {
+                                filteredYearly = filteredYearly.filter(item => {
+                                    return item.year >= parseInt(selectedYearRange.start) && item.year <= parseInt(selectedYearRange.end);
+                                });
+                            }
+
+                            chartData = filteredYearly.map(item => ({
+                                period: item.year.toString(),
+                                revenue: Math.round(item.revenue || 0),
+                                profit: Math.round(item.profit || 0),
+                                zrsProfit: Math.round(item.zrsProfit || 0),
+                                sales: item.sales || 0
+                            }));
+                            chartTitle = selectedYearRange.start && selectedYearRange.end 
+                                ? 'Yearly Trend (Selected Range)' 
+                                : 'Yearly Trend (Last 5 Years)';
+                        }
+
+                        // Get available months and years for filters
+                        const availableMonths = stats.sales.monthly.map(item => item.month).sort();
+                        const availableYears = (stats.sales.yearly || []).map(item => item.year).sort((a, b) => a - b);
+
+                        return (
+                            <div className="mb-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h4 className="text-sm font-semibold text-gray-700">{chartTitle}</h4>
+                                    <div className="flex items-center gap-2">
+                                        <select
+                                            value={monthlyTrendView}
+                                            onChange={(e) => {
+                                                setMonthlyTrendView(e.target.value);
+                                                setSelectedMonthRange({ start: '', end: '' });
+                                                setSelectedYearRange({ start: '', end: '' });
+                                            }}
+                                            className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                        >
+                                            <option value="months">Monthly View</option>
+                                            <option value="year">Yearly View</option>
+                                        </select>
+                                        {monthlyTrendView === 'months' ? (
+                                            <>
+                                                <select
+                                                    value={selectedMonthRange.start}
+                                                    onChange={(e) => setSelectedMonthRange({ ...selectedMonthRange, start: e.target.value })}
+                                                    className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                >
+                                                    <option value="">From Month</option>
+                                                    {availableMonths.map(month => (
+                                                        <option key={month} value={month}>{month}</option>
+                                                    ))}
+                                                </select>
+                                                <select
+                                                    value={selectedMonthRange.end}
+                                                    onChange={(e) => setSelectedMonthRange({ ...selectedMonthRange, end: e.target.value })}
+                                                    className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                >
+                                                    <option value="">To Month</option>
+                                                    {availableMonths.map(month => (
+                                                        <option key={month} value={month}>{month}</option>
+                                                    ))}
+                                                </select>
+                                                {(selectedMonthRange.start || selectedMonthRange.end) && (
+                                                    <button
+                                                        onClick={() => setSelectedMonthRange({ start: '', end: '' })}
+                                                        className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <select
+                                                    value={selectedYearRange.start}
+                                                    onChange={(e) => setSelectedYearRange({ ...selectedYearRange, start: e.target.value })}
+                                                    className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                >
+                                                    <option value="">From Year</option>
+                                                    {availableYears.map(year => (
+                                                        <option key={year} value={year}>{year}</option>
+                                                    ))}
+                                                </select>
+                                                <select
+                                                    value={selectedYearRange.end}
+                                                    onChange={(e) => setSelectedYearRange({ ...selectedYearRange, end: e.target.value })}
+                                                    className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                >
+                                                    <option value="">To Year</option>
+                                                    {availableYears.map(year => (
+                                                        <option key={year} value={year}>{year}</option>
+                                                    ))}
+                                                </select>
+                                                {(selectedYearRange.start || selectedYearRange.end) && (
+                                                    <button
+                                                        onClick={() => setSelectedYearRange({ start: '', end: '' })}
+                                                        className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                                                    >
+                                                        Clear
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                                <ResponsiveContainer width="100%" height={300}>
+                                    <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                        <defs>
+                                            <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
+                                                <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                                            </linearGradient>
+                                            <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                        <XAxis 
+                                            dataKey="period" 
+                                            stroke="#6b7280"
+                                            style={{ fontSize: '12px' }}
+                                            angle={monthlyTrendView === 'months' ? -45 : 0}
+                                            textAnchor={monthlyTrendView === 'months' ? 'end' : 'middle'}
+                                            height={monthlyTrendView === 'months' ? 80 : 30}
+                                        />
+                                        <YAxis 
+                                            stroke="#6b7280"
+                                            style={{ fontSize: '12px' }}
+                                            tickFormatter={(value) => `AED ${(value / 1000).toFixed(0)}k`}
+                                        />
+                                        <Tooltip 
+                                            contentStyle={{ 
+                                                backgroundColor: '#fff', 
+                                                border: '1px solid #e5e7eb',
+                                                borderRadius: '8px',
+                                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                            }}
+                                            formatter={(value, name) => {
+                                                if (name === 'sales') return [value, 'Sales Count'];
+                                                return [`AED ${value.toLocaleString()}`, name === 'revenue' ? 'Revenue' : name === 'profit' ? 'Profit' : 'ZRS Profit'];
+                                            }}
+                                        />
+                                        <Legend 
+                                            wrapperStyle={{ paddingTop: '20px' }}
+                                            formatter={(value) => {
+                                                if (value === 'revenue') return 'Revenue';
+                                                if (value === 'profit') return 'Profit';
+                                                if (value === 'zrsProfit') return 'ZRS Profit';
+                                                return value;
+                                            }}
+                                        />
+                                        <Area 
+                                            type="monotone" 
+                                            dataKey="revenue" 
+                                            stroke="#10b981" 
+                                            fillOpacity={1} 
+                                            fill="url(#colorRevenue)" 
+                                            strokeWidth={2}
+                                        />
+                                        <Area 
+                                            type="monotone" 
+                                            dataKey="profit" 
+                                            stroke="#3b82f6" 
+                                            fillOpacity={1} 
+                                            fill="url(#colorProfit)" 
+                                            strokeWidth={2}
+                                        />
+                                        <Area 
+                                            type="monotone" 
+                                            dataKey="zrsProfit" 
+                                            stroke="#8b5cf6" 
+                                            fill="#8b5cf6" 
+                                            fillOpacity={0.3}
+                                            strokeWidth={2}
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                        );
+                    })()}
+
+                    {/* Yearly Overview and Sales Count */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Yearly Bar Chart */}
+                        {stats?.sales?.yearly && stats.sales.yearly.length > 0 && (() => {
+                            let chartData = [];
+                            let chartTitle = '';
+
+                            if (yearlyOverviewView === 'year') {
+                                let filteredYearly = stats.sales.yearly;
+                                if (selectedYearRange.start && selectedYearRange.end) {
+                                    filteredYearly = filteredYearly.filter(item => {
+                                        return item.year >= parseInt(selectedYearRange.start) && item.year <= parseInt(selectedYearRange.end);
+                                    });
+                                }
+
+                                chartData = filteredYearly.map(item => ({
+                                    period: item.year.toString(),
+                                    revenue: Math.round(item.revenue || 0),
+                                    profit: Math.round(item.profit || 0),
+                                    zrsProfit: Math.round(item.zrsProfit || 0)
+                                }));
+                                chartTitle = selectedYearRange.start && selectedYearRange.end 
+                                    ? 'Yearly Overview (Selected Range)' 
+                                    : 'Yearly Overview (Last 5 Years)';
+                            } else {
+                                // Monthly view for this chart
+                                let filteredMonthly = stats.sales.monthly;
+                                if (selectedMonthRange.start && selectedMonthRange.end) {
+                                    filteredMonthly = filteredMonthly.filter(item => {
+                                        return item.month >= selectedMonthRange.start && item.month <= selectedMonthRange.end;
+                                    });
+                                }
+
+                                chartData = filteredMonthly.map(item => {
+                                    try {
+                                        const dateStr = item.month && item.month.includes('-') ? item.month + '-01' : item.month;
+                                        const date = new Date(dateStr);
+                                        const monthLabel = isNaN(date.getTime()) 
+                                            ? item.month 
+                                            : date.toLocaleDateString('en-US', { month: 'short' });
+                                        return {
+                                            period: monthLabel,
+                                            revenue: Math.round(item.revenue || 0),
+                                            profit: Math.round(item.profit || 0),
+                                            zrsProfit: Math.round(item.zrsProfit || 0)
+                                        };
+                                    } catch (e) {
+                                        return {
+                                            period: item.month || 'Unknown',
+                                            revenue: Math.round(item.revenue || 0),
+                                            profit: Math.round(item.profit || 0),
+                                            zrsProfit: Math.round(item.zrsProfit || 0)
+                                        };
+                                    }
+                                });
+                                chartTitle = selectedMonthRange.start && selectedMonthRange.end 
+                                    ? 'Monthly Overview (Selected Range)' 
+                                    : 'Monthly Overview (Last 12 Months)';
+                            }
+
+                            const availableMonths = stats.sales.monthly.map(item => item.month).sort();
+                            const availableYears = stats.sales.yearly.map(item => item.year).sort((a, b) => a - b);
+
+                            return (
+                                <div>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h4 className="text-sm font-semibold text-gray-700">{chartTitle}</h4>
+                                        <div className="flex items-center gap-2">
+                                            <select
+                                                value={yearlyOverviewView}
+                                                onChange={(e) => {
+                                                    setYearlyOverviewView(e.target.value);
+                                                    setSelectedMonthRange({ start: '', end: '' });
+                                                    setSelectedYearRange({ start: '', end: '' });
+                                                }}
+                                                className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                            >
+                                                <option value="year">Yearly View</option>
+                                                <option value="months">Monthly View</option>
+                                            </select>
+                                            {yearlyOverviewView === 'year' ? (
+                                                <>
+                                                    <select
+                                                        value={selectedYearRange.start}
+                                                        onChange={(e) => setSelectedYearRange({ ...selectedYearRange, start: e.target.value })}
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                    >
+                                                        <option value="">From Year</option>
+                                                        {availableYears.map(year => (
+                                                            <option key={year} value={year}>{year}</option>
+                                                        ))}
+                                                    </select>
+                                                    <select
+                                                        value={selectedYearRange.end}
+                                                        onChange={(e) => setSelectedYearRange({ ...selectedYearRange, end: e.target.value })}
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                    >
+                                                        <option value="">To Year</option>
+                                                        {availableYears.map(year => (
+                                                            <option key={year} value={year}>{year}</option>
+                                                        ))}
+                                                    </select>
+                                                    {(selectedYearRange.start || selectedYearRange.end) && (
+                                                        <button
+                                                            onClick={() => setSelectedYearRange({ start: '', end: '' })}
+                                                            className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <select
+                                                        value={selectedMonthRange.start}
+                                                        onChange={(e) => setSelectedMonthRange({ ...selectedMonthRange, start: e.target.value })}
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                    >
+                                                        <option value="">From Month</option>
+                                                        {availableMonths.map(month => (
+                                                            <option key={month} value={month}>{month}</option>
+                                                        ))}
+                                                    </select>
+                                                    <select
+                                                        value={selectedMonthRange.end}
+                                                        onChange={(e) => setSelectedMonthRange({ ...selectedMonthRange, end: e.target.value })}
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                    >
+                                                        <option value="">To Month</option>
+                                                        {availableMonths.map(month => (
+                                                            <option key={month} value={month}>{month}</option>
+                                                        ))}
+                                                    </select>
+                                                    {(selectedMonthRange.start || selectedMonthRange.end) && (
+                                                        <button
+                                                            onClick={() => setSelectedMonthRange({ start: '', end: '' })}
+                                                            className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <ResponsiveContainer width="100%" height={250}>
+                                        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                            <XAxis 
+                                                dataKey="period" 
+                                                stroke="#6b7280"
+                                                style={{ fontSize: '12px' }}
+                                                angle={yearlyOverviewView === 'months' ? -45 : 0}
+                                                textAnchor={yearlyOverviewView === 'months' ? 'end' : 'middle'}
+                                                height={yearlyOverviewView === 'months' ? 60 : 30}
+                                            />
+                                            <YAxis 
+                                                stroke="#6b7280"
+                                                style={{ fontSize: '12px' }}
+                                                tickFormatter={(value) => `AED ${(value / 1000).toFixed(0)}k`}
+                                            />
+                                            <Tooltip 
+                                                contentStyle={{ 
+                                                    backgroundColor: '#fff', 
+                                                    border: '1px solid #e5e7eb',
+                                                    borderRadius: '8px',
+                                                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                                }}
+                                                formatter={(value) => [`AED ${value.toLocaleString()}`, '']}
+                                            />
+                                            <Legend 
+                                                formatter={(value) => {
+                                                    if (value === 'revenue') return 'Revenue';
+                                                    if (value === 'profit') return 'Profit';
+                                                    if (value === 'zrsProfit') return 'ZRS Profit';
+                                                    return value;
+                                                }}
+                                            />
+                                            <Bar dataKey="revenue" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                            <Bar dataKey="profit" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                                            <Bar dataKey="zrsProfit" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            );
+                        })()}
+
+                        {/* Monthly Sales Count Line Chart */}
+                        {stats?.sales?.monthly && stats.sales.monthly.length > 0 && (() => {
+                            let chartData = [];
+                            let chartTitle = '';
+
+                            if (salesCountView === 'months') {
+                                let filteredMonthly = stats.sales.monthly;
+                                if (selectedMonthRange.start && selectedMonthRange.end) {
+                                    filteredMonthly = filteredMonthly.filter(item => {
+                                        return item.month >= selectedMonthRange.start && item.month <= selectedMonthRange.end;
+                                    });
+                                }
+
+                                chartData = filteredMonthly.map(item => {
+                                    try {
+                                        const dateStr = item.month && item.month.includes('-') ? item.month + '-01' : item.month;
+                                        const date = new Date(dateStr);
+                                        const monthLabel = isNaN(date.getTime()) 
+                                            ? item.month 
+                                            : date.toLocaleDateString('en-US', { month: 'short' });
+                                        return {
+                                            period: monthLabel,
+                                            sales: item.sales || 0
+                                        };
+                                    } catch (e) {
+                                        return {
+                                            period: item.month || 'Unknown',
+                                            sales: item.sales || 0
+                                        };
+                                    }
+                                });
+                                chartTitle = selectedMonthRange.start && selectedMonthRange.end 
+                                    ? 'Sales Count Trend (Selected Range)' 
+                                    : 'Sales Count Trend (Last 12 Months)';
+                            } else {
+                                // Yearly view
+                                let filteredYearly = stats.sales.yearly || [];
+                                if (selectedYearRange.start && selectedYearRange.end) {
+                                    filteredYearly = filteredYearly.filter(item => {
+                                        return item.year >= parseInt(selectedYearRange.start) && item.year <= parseInt(selectedYearRange.end);
+                                    });
+                                }
+
+                                chartData = filteredYearly.map(item => ({
+                                    period: item.year.toString(),
+                                    sales: item.sales || 0
+                                }));
+                                chartTitle = selectedYearRange.start && selectedYearRange.end 
+                                    ? 'Sales Count Trend (Selected Range)' 
+                                    : 'Sales Count Trend (Last 5 Years)';
+                            }
+
+                            const availableMonths = stats.sales.monthly.map(item => item.month).sort();
+                            const availableYears = (stats.sales.yearly || []).map(item => item.year).sort((a, b) => a - b);
+
+                            return (
+                                <div>
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h4 className="text-sm font-semibold text-gray-700">{chartTitle}</h4>
+                                        <div className="flex items-center gap-2">
+                                            <select
+                                                value={salesCountView}
+                                                onChange={(e) => {
+                                                    setSalesCountView(e.target.value);
+                                                    setSelectedMonthRange({ start: '', end: '' });
+                                                    setSelectedYearRange({ start: '', end: '' });
+                                                }}
+                                                className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                            >
+                                                <option value="months">Monthly View</option>
+                                                <option value="year">Yearly View</option>
+                                            </select>
+                                            {salesCountView === 'months' ? (
+                                                <>
+                                                    <select
+                                                        value={selectedMonthRange.start}
+                                                        onChange={(e) => setSelectedMonthRange({ ...selectedMonthRange, start: e.target.value })}
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                    >
+                                                        <option value="">From Month</option>
+                                                        {availableMonths.map(month => (
+                                                            <option key={month} value={month}>{month}</option>
+                                                        ))}
+                                                    </select>
+                                                    <select
+                                                        value={selectedMonthRange.end}
+                                                        onChange={(e) => setSelectedMonthRange({ ...selectedMonthRange, end: e.target.value })}
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                    >
+                                                        <option value="">To Month</option>
+                                                        {availableMonths.map(month => (
+                                                            <option key={month} value={month}>{month}</option>
+                                                        ))}
+                                                    </select>
+                                                    {(selectedMonthRange.start || selectedMonthRange.end) && (
+                                                        <button
+                                                            onClick={() => setSelectedMonthRange({ start: '', end: '' })}
+                                                            className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <select
+                                                        value={selectedYearRange.start}
+                                                        onChange={(e) => setSelectedYearRange({ ...selectedYearRange, start: e.target.value })}
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                    >
+                                                        <option value="">From Year</option>
+                                                        {availableYears.map(year => (
+                                                            <option key={year} value={year}>{year}</option>
+                                                        ))}
+                                                    </select>
+                                                    <select
+                                                        value={selectedYearRange.end}
+                                                        onChange={(e) => setSelectedYearRange({ ...selectedYearRange, end: e.target.value })}
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                    >
+                                                        <option value="">To Year</option>
+                                                        {availableYears.map(year => (
+                                                            <option key={year} value={year}>{year}</option>
+                                                        ))}
+                                                    </select>
+                                                    {(selectedYearRange.start || selectedYearRange.end) && (
+                                                        <button
+                                                            onClick={() => setSelectedYearRange({ start: '', end: '' })}
+                                                            className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                                                        >
+                                                            Clear
+                                                        </button>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <ResponsiveContainer width="100%" height={250}>
+                                        <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                            <XAxis 
+                                                dataKey="period" 
+                                                stroke="#6b7280"
+                                                style={{ fontSize: '12px' }}
+                                                angle={salesCountView === 'months' ? -45 : 0}
+                                                textAnchor={salesCountView === 'months' ? 'end' : 'middle'}
+                                                height={salesCountView === 'months' ? 60 : 30}
+                                            />
+                                            <YAxis 
+                                                stroke="#6b7280"
+                                                style={{ fontSize: '12px' }}
+                                            />
+                                            <Tooltip 
+                                                contentStyle={{ 
+                                                    backgroundColor: '#fff', 
+                                                    border: '1px solid #e5e7eb',
+                                                    borderRadius: '8px',
+                                                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                                }}
+                                                formatter={(value) => [value, 'Sales']}
+                                            />
+                                            <Legend />
+                                            <Line 
+                                                type="monotone" 
+                                                dataKey="sales" 
+                                                stroke="#f59e0b" 
+                                                strokeWidth={3}
+                                                dot={{ fill: '#f59e0b', r: 4 }}
+                                                activeDot={{ r: 6 }}
+                                            />
+                                        </LineChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            );
+                        })()}
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
                 <div className="bg-white p-6 rounded-lg shadow">
                     <h3 className="text-lg font-semibold mb-4">Pending Approvals</h3>
                     <div className="space-y-3">
@@ -484,57 +1119,82 @@ const AdminDashboard = () => {
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div className="bg-white p-6 rounded-lg shadow">
-                <h3 className="text-lg font-semibold mb-4">Investor Utilization</h3>
-                <div className="space-y-3">
-                    <div className="flex justify-between">
-                        <span className="text-gray-600">Total Credit Limit:</span>
-                        <span className="font-bold">
-                            AED {stats?.investors?.totalCreditLimit?.toLocaleString() || 0}
-                        </span>
-                    </div>
-                    <div className="flex justify-between">
-                        <span className="text-gray-600">Total Utilized:</span>
-                        <span className="font-bold">
-                            AED {stats?.investors?.totalUtilized?.toLocaleString() || 0}
-                        </span>
-                    </div>
-                    <div>
-                        <div className="flex justify-between mb-2">
-                            <span className="text-gray-600">Utilization:</span>
-                            <span className="font-bold">{stats?.investors?.utilizationPercentage?.toFixed(2) || 0}%</span>
+                <div className="bg-white p-6 rounded-lg shadow">
+                    <h3 className="text-lg font-semibold mb-4">Investor Utilization</h3>
+                    <div className="space-y-3">
+                        <div className="flex justify-between">
+                            <span className="text-gray-600">Total Credit Limit:</span>
+                            <span className="font-bold">
+                                AED {stats?.investors?.totalCreditLimit?.toLocaleString() || 0}
+                            </span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                                className="bg-primary-600 h-2 rounded-full"
-                                style={{ width: `${stats?.investors?.utilizationPercentage || 0}%` }}
-                            ></div>
+                        <div className="flex justify-between">
+                            <span className="text-gray-600">Total Utilized:</span>
+                            <span className="font-bold">
+                                AED {stats?.investors?.totalUtilized?.toLocaleString() || 0}
+                            </span>
+                        </div>
+                        <div>
+                            <div className="flex justify-between mb-2">
+                                <span className="text-gray-600">Utilization:</span>
+                                <span className="font-bold">{stats?.investors?.utilizationPercentage?.toFixed(2) || 0}%</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div
+                                    className="bg-primary-600 h-2 rounded-full"
+                                    style={{ width: `${stats?.investors?.utilizationPercentage || 0}%` }}
+                                ></div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
             {/* Recent Inventory */}
-            {stats?.inventory?.recentItems && stats.inventory.recentItems.length > 0 && (
-                <div className="mt-8 bg-white rounded-lg shadow">
-                    <div className="px-6 py-4 border-b">
-                        <h3 className="text-lg font-semibold">Recent Inventory</h3>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Investor</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Purchase Price</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date Added</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {stats.inventory.recentItems.map((item) => (
+            {stats?.inventory?.recentItems && stats.inventory.recentItems.length > 0 && (() => {
+                // Pagination calculations
+                const totalPages = Math.ceil(stats.inventory.recentItems.length / itemsPerPage);
+                const startIndex = (currentPage - 1) * itemsPerPage;
+                const endIndex = startIndex + itemsPerPage;
+                const paginatedItems = stats.inventory.recentItems.slice(startIndex, endIndex);
+
+                const handlePageChange = (page) => {
+                    setCurrentPage(page);
+                    // Scroll to "Recent Inventory" heading after state update with 20px padding
+                    // Use requestAnimationFrame to ensure DOM has updated
+                    requestAnimationFrame(() => {
+                        setTimeout(() => {
+                            if (tableRef.current) {
+                                const elementPosition = tableRef.current.getBoundingClientRect().top;
+                                const offsetPosition = elementPosition + window.pageYOffset - 50;
+                                window.scrollTo({
+                                    top: offsetPosition,
+                                    behavior: 'smooth'
+                                });
+                            }
+                        }, 10);
+                    });
+                };
+
+                return (
+                    <div className="mt-8 bg-white rounded-lg shadow">
+                        <div className="px-6 py-4 border-b" ref={tableRef}>
+                            <h3 className="text-lg font-semibold">Recent Inventory</h3>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Details</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Investor</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Purchase Price</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date Added</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {paginatedItems.map((item) => (
                                     <tr key={item._id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">
@@ -605,12 +1265,64 @@ const AdminDashboard = () => {
                                             {item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '-'}
                                         </td>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        {/* Pagination Controls */}
+                        <div className="bg-white px-4 py-3 border-t border-gray-200">
+                            <div className="flex items-center justify-center gap-2">
+                                <button
+                                    onClick={() => handlePageChange(currentPage - 1)}
+                                    disabled={currentPage === 1}
+                                    className={`px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                                        currentPage === 1
+                                            ? 'text-gray-400 cursor-not-allowed bg-gray-100'
+                                            : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                                    }`}
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                </button>
+                                
+                                <div className="flex items-center gap-1">
+                                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                                        <button
+                                            key={page}
+                                            onClick={() => handlePageChange(page)}
+                                            className={`px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                                                currentPage === page
+                                                    ? 'bg-primary-600 text-white shadow-sm'
+                                                    : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                                            }`}
+                                        >
+                                            {page}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <button
+                                    onClick={() => handlePageChange(currentPage + 1)}
+                                    disabled={currentPage === totalPages}
+                                    className={`px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                                        currentPage === totalPages
+                                            ? 'text-gray-400 cursor-not-allowed bg-gray-100'
+                                            : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 hover:border-gray-400'
+                                    }`}
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div className="mt-2 text-center text-sm text-gray-500">
+                                Showing {startIndex + 1} to {Math.min(endIndex, stats.inventory.recentItems.length)} of {stats.inventory.recentItems.length} vehicles
+                            </div>
+                        </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Approval Groups (X/Y) */}
             <div className="mt-8 bg-white p-6 rounded-lg shadow">
