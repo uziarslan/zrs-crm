@@ -143,7 +143,7 @@ const Inventory = () => {
     // Customer registration card is not counted in progress
     const attachments = vehicle.attachments || [];
     const hasNewRegistrationCard = attachments.some(doc => doc.category === 'registrationCardNew');
-    
+
     let documentTotal = 1; // Only showroom registration card is required
     let documentCompleted = hasNewRegistrationCard ? 1 : 0;
 

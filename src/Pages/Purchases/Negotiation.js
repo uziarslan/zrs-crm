@@ -314,28 +314,22 @@ const Negotiation = () => {
     };
 
     const getDocumentProgress = (lead) => {
-        const hasOldRegistrationCard = lead.attachments?.some(doc => doc.category === 'registrationCard');
-        const hasNewRegistrationCard = lead.attachments?.some(doc => doc.category === 'registrationCardNew');
+        // Check for 3 required documents (matching detail page logic):
+        // 1. Registration Card (customer registration card)
+        // 2. Car Pictures
+        // 3. Online History Check
+        const hasRegistrationCard = lead.attachments?.some(doc => doc.category === 'registrationCard');
         const hasCarPictures = lead.attachments?.some(doc => doc.category === 'carPictures');
         const hasOnlineHistoryCheck = lead.attachments?.some(doc => doc.category === 'onlineHistoryCheck');
 
         let completed = 0;
-        let total = 3; // Base: registration card, car pictures, online history check
+        const total = 3; // Always 3 documents required
 
-        // If old registration card exists, we need both old and new (total becomes 4)
-        if (hasOldRegistrationCard) {
-            total = 4;
-            if (hasOldRegistrationCard) completed++;
-            if (hasNewRegistrationCard) completed++;
-        } else {
-            // No old registration card, just need one registration card (old or new)
-            if (hasOldRegistrationCard || hasNewRegistrationCard) completed++;
-        }
-
+        if (hasRegistrationCard) completed++;
         if (hasCarPictures) completed++;
         if (hasOnlineHistoryCheck) completed++;
 
-        return total > 0 ? Math.round((completed / total) * 100) : 0;
+        return Math.round((completed / total) * 100);
     };
 
     if (loading) {
