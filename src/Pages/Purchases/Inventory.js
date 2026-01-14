@@ -139,8 +139,16 @@ const Inventory = () => {
       financialCompleted = vehicle.financialChecklist?.completedItems || 0;
     }
 
-    const totalItems = operationalItems.length + financialTotal;
-    const totalCompleted = operationalCompleted + financialCompleted;
+    // Document requirements: Only check for showroom registration card (new registration card)
+    // Customer registration card is not counted in progress
+    const attachments = vehicle.attachments || [];
+    const hasNewRegistrationCard = attachments.some(doc => doc.category === 'registrationCardNew');
+    
+    let documentTotal = 1; // Only showroom registration card is required
+    let documentCompleted = hasNewRegistrationCard ? 1 : 0;
+
+    const totalItems = operationalItems.length + financialTotal + documentTotal;
+    const totalCompleted = operationalCompleted + financialCompleted + documentCompleted;
 
     if (totalItems === 0) return 0;
     return Math.round((totalCompleted / totalItems) * 100);

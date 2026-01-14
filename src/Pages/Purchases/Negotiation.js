@@ -314,11 +314,28 @@ const Negotiation = () => {
     };
 
     const getDocumentProgress = (lead) => {
+        const hasOldRegistrationCard = lead.attachments?.some(doc => doc.category === 'registrationCard');
+        const hasNewRegistrationCard = lead.attachments?.some(doc => doc.category === 'registrationCardNew');
+        const hasCarPictures = lead.attachments?.some(doc => doc.category === 'carPictures');
+        const hasOnlineHistoryCheck = lead.attachments?.some(doc => doc.category === 'onlineHistoryCheck');
+
         let completed = 0;
-        if (lead.attachments?.some(doc => doc.category === 'registrationCard')) completed++;
-        if (lead.attachments?.some(doc => doc.category === 'carPictures')) completed++;
-        if (lead.attachments?.some(doc => doc.category === 'onlineHistoryCheck')) completed++;
-        return Math.round((completed / 3) * 100);
+        let total = 3; // Base: registration card, car pictures, online history check
+
+        // If old registration card exists, we need both old and new (total becomes 4)
+        if (hasOldRegistrationCard) {
+            total = 4;
+            if (hasOldRegistrationCard) completed++;
+            if (hasNewRegistrationCard) completed++;
+        } else {
+            // No old registration card, just need one registration card (old or new)
+            if (hasOldRegistrationCard || hasNewRegistrationCard) completed++;
+        }
+
+        if (hasCarPictures) completed++;
+        if (hasOnlineHistoryCheck) completed++;
+
+        return total > 0 ? Math.round((completed / total) * 100) : 0;
     };
 
     if (loading) {
@@ -327,23 +344,21 @@ const Negotiation = () => {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                     {notification.show && (
                         <div
-                            className={`mb-4 border-l-4 p-4 rounded-r-lg ${
-                                notification.type === 'success'
+                            className={`mb-4 border-l-4 p-4 rounded-r-lg ${notification.type === 'success'
                                     ? 'bg-green-50 border-green-400'
                                     : notification.type === 'warning'
                                         ? 'bg-yellow-50 border-yellow-400'
                                         : 'bg-red-50 border-red-400'
-                            }`}
+                                }`}
                         >
                             <div className="flex items-center justify-between">
                                 <p
-                                    className={`text-sm ${
-                                        notification.type === 'success'
+                                    className={`text-sm ${notification.type === 'success'
                                             ? 'text-green-700'
                                             : notification.type === 'warning'
                                                 ? 'text-yellow-700'
                                                 : 'text-red-700'
-                                    }`}
+                                        }`}
                                 >
                                     {notification.message}
                                 </p>
@@ -387,23 +402,21 @@ const Negotiation = () => {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
                 {notification.show && (
                     <div
-                        className={`mb-4 border-l-4 p-4 rounded-r-lg ${
-                            notification.type === 'success'
+                        className={`mb-4 border-l-4 p-4 rounded-r-lg ${notification.type === 'success'
                                 ? 'bg-green-50 border-green-400'
                                 : notification.type === 'warning'
                                     ? 'bg-yellow-50 border-yellow-400'
                                     : 'bg-red-50 border-red-400'
-                        }`}
+                            }`}
                     >
                         <div className="flex items-center justify-between">
                             <p
-                                className={`text-sm ${
-                                    notification.type === 'success'
+                                className={`text-sm ${notification.type === 'success'
                                         ? 'text-green-700'
                                         : notification.type === 'warning'
                                             ? 'text-yellow-700'
                                             : 'text-red-700'
-                                }`}
+                                    }`}
                             >
                                 {notification.message}
                             </p>

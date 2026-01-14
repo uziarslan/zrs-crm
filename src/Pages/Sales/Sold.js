@@ -5,15 +5,50 @@ import axiosInstance from '../../services/axiosInstance';
 
 const Sold = () => {
   const [leads, setLeads] = useState([]);
+  const [allLeads, setAllLeads] = useState([]); // Store all leads for filtering
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [filters, setFilters] = useState({ search: '' });
+  const [filters, setFilters] = useState({ search: '', startDate: '', endDate: '' });
   const [notification, setNotification] = useState({ show: false, type: 'success', message: '' });
 
   useEffect(() => {
     fetchSoldLeads();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters]);
+  }, [filters.search]);
+
+  // Filter leads based on date range (search is handled by backend)
+  useEffect(() => {
+    let filtered = [...allLeads];
+
+    // Apply date filter
+    if (filters.startDate || filters.endDate) {
+      filtered = filtered.filter((lead) => {
+        const sellInvoice = lead.sellInvoice || {};
+        const soldDate = sellInvoice.createdAt || lead.updatedAt || lead.createdAt;
+        
+        if (!soldDate) return false;
+
+        const soldDateObj = new Date(soldDate);
+        soldDateObj.setHours(0, 0, 0, 0);
+
+        if (filters.startDate) {
+          const startDateObj = new Date(filters.startDate);
+          startDateObj.setHours(0, 0, 0, 0);
+          if (soldDateObj < startDateObj) return false;
+        }
+
+        if (filters.endDate) {
+          const endDateObj = new Date(filters.endDate);
+          endDateObj.setHours(23, 59, 59, 999);
+          if (soldDateObj > endDateObj) return false;
+        }
+
+        return true;
+      });
+    }
+
+    setLeads(filtered);
+  }, [allLeads, filters.startDate, filters.endDate]);
 
   const showNotification = useCallback((type, message) => {
     setNotification({ show: true, type, message });
@@ -34,7 +69,8 @@ const Sold = () => {
       if (filters.search) params.append('search', filters.search);
 
       const response = await axiosInstance.get(`/purchases/leads?${params}`);
-      setLeads(response.data.data || []);
+      const fetchedLeads = response.data.data || [];
+      setAllLeads(fetchedLeads);
       setError('');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to fetch sold leads');
@@ -47,14 +83,21 @@ const Sold = () => {
     try {
       const params = new URLSearchParams();
       params.append('status', 'sold');
+      if (filters.search) params.append('search', filters.search);
 
       const response = await axiosInstance.get(`/export/leads?${params}`, {
         responseType: 'blob'
       });
+      
+      // Note: Backend export doesn't support date filtering yet
+      // For now, we export all sold leads. Date filtering can be added to backend later.
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
+      const dateRange = filters.startDate || filters.endDate 
+        ? `_${filters.startDate || 'all'}_to_${filters.endDate || 'all'}`
+        : '';
       link.href = url;
-      link.setAttribute('download', `sold_vehicles_${Date.now()}.xlsx`);
+      link.setAttribute('download', `sold_vehicles${dateRange}_${Date.now()}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -135,30 +178,70 @@ const Sold = () => {
       )}
 
       {/* Filters */}
-      <div className="mb-6 flex flex-col md:flex-row gap-4">
-        <div className="flex-1 relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-            <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+      <div className="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Search Input */}
+          <div className="flex-1 relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Search sold vehicles..."
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
+            />
           </div>
-          <input
-            type="text"
-            placeholder="Search sold vehicles..."
-            value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-            className="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-          />
+
+          {/* Date Range Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex items-center gap-2 min-w-[140px]">
+              <label className="text-sm font-medium text-gray-700 whitespace-nowrap">From Date:</label>
+              <input
+                type="date"
+                value={filters.startDate}
+                onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+                className="flex-1 px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
+              />
+            </div>
+            <div className="flex items-center gap-2 min-w-[140px]">
+              <label className="text-sm font-medium text-gray-700 whitespace-nowrap">To Date:</label>
+              <input
+                type="date"
+                value={filters.endDate}
+                onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+                className="flex-1 px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            {(filters.startDate || filters.endDate || filters.search) && (
+              <button
+                onClick={() => setFilters({ search: '', startDate: '', endDate: '' })}
+                className="inline-flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 px-4 py-2.5 rounded-lg hover:bg-gray-50 hover:border-gray-400 active:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow font-medium text-sm whitespace-nowrap"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Clear</span>
+              </button>
+            )}
+            <button
+              onClick={exportSales}
+              className="inline-flex items-center justify-center gap-2 bg-primary-600 text-white px-6 py-2.5 rounded-lg hover:bg-primary-700 active:bg-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow-md font-medium text-sm whitespace-nowrap"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>Export Data</span>
+            </button>
+          </div>
         </div>
-        <button
-          onClick={exportSales}
-          className="inline-flex items-center justify-center bg-green-600 text-white px-6 py-2.5 rounded-lg hover:bg-green-700 transition-all shadow-md hover:shadow-lg font-medium"
-        >
-          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Export
-        </button>
       </div>
 
       {/* Table */}
@@ -284,10 +367,10 @@ const Sold = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <Link
                         to={`/sales/sold/${lead._id}`}
-                        className="inline-flex items-center px-3 py-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-all"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-primary-700 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100 hover:border-primary-300 hover:text-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 transition-all duration-200"
                       >
-                        View
-                        <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <span>View</span>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       </Link>
@@ -306,7 +389,9 @@ const Sold = () => {
             </svg>
             <h3 className="text-lg font-medium text-gray-900 mb-1">No sold vehicles</h3>
             <p className="text-sm text-gray-500">
-              {filters.search ? 'Try adjusting your search' : 'Sold vehicles will appear here when Sell Invoices are generated'}
+              {(filters.search || filters.startDate || filters.endDate) 
+                ? 'Try adjusting your filters' 
+                : 'Sold vehicles will appear here when Sell Invoices are generated'}
             </p>
           </div>
         )}

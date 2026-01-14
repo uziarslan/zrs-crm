@@ -156,7 +156,7 @@ const LeadDetail = () => {
   };
 
   const canEdit = () => {
-    if (user?.role === 'manager' && lead?.status === 'new') return true;
+    if (user?.role === 'manager' && (lead?.status === 'new' || lead?.status === 'cancelled')) return true;
     if (user?.role === 'admin') return true;
     return false;
   };
@@ -390,7 +390,7 @@ const LeadDetail = () => {
               Back to Leads
             </button>
 
-            {canEdit() && lead?.status === 'new' && (
+            {canEdit() && (lead?.status === 'new' || lead?.status === 'cancelled') && (
               <button
                 onClick={() => setEditMode(!editMode)}
                 className={`inline-flex items-center px-4 py-2 border text-sm font-medium rounded-lg transition-all ${editMode
@@ -433,7 +433,7 @@ const LeadDetail = () => {
           </div>
         </div>
 
-        {user?.role === 'manager' && lead?.status !== 'new' && !editMode && (
+        {user?.role === 'manager' && lead?.status !== 'new' && lead?.status !== 'cancelled' && !editMode && (
           <div className="mb-6 bg-amber-50 border-l-4 border-amber-400 p-4 rounded-r-lg">
             <div className="flex">
               <div className="flex-shrink-0">
@@ -443,7 +443,7 @@ const LeadDetail = () => {
               </div>
               <div className="ml-3">
                 <p className="text-sm text-amber-700">
-                  You can only edit leads when status is "new". This lead is currently "{lead?.status}".
+                  You can only edit leads when status is "new" or "cancelled". This lead is currently "{lead?.status}".
                 </p>
               </div>
             </div>
