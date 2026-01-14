@@ -440,25 +440,25 @@ const AdminDashboard = () => {
 
             {/* Enhanced Sales Performance Section */}
             <div className="mb-8">
-                <div className="bg-white p-6 rounded-lg shadow">
-                    <div className="flex items-center justify-between mb-6">
+                <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                         <h3 className="text-xl font-bold text-gray-900">Sales Performance</h3>
-                        <div className="flex gap-4">
+                        <div className="flex flex-wrap gap-4">
                             <div className="text-right">
                                 <div className="text-xs text-gray-500">Total Revenue</div>
-                                <div className="text-lg font-bold text-green-600">
+                                <div className="text-base sm:text-lg font-bold text-green-600">
                                     AED {stats?.sales?.totalRevenue?.toLocaleString() || 0}
                                 </div>
                             </div>
                             <div className="text-right">
                                 <div className="text-xs text-gray-500">Total Profit</div>
-                                <div className="text-lg font-bold text-green-600">
+                                <div className="text-base sm:text-lg font-bold text-green-600">
                                     AED {stats?.sales?.totalProfit?.toLocaleString() || 0}
                                 </div>
                             </div>
                             <div className="text-right">
                                 <div className="text-xs text-gray-500">ZRS Profit</div>
-                                <div className="text-lg font-bold text-primary-600">
+                                <div className="text-base sm:text-lg font-bold text-primary-600">
                                     AED {stats?.sales?.totalZrsProfit?.toLocaleString() || 0}
                                 </div>
                             </div>
@@ -469,22 +469,22 @@ const AdminDashboard = () => {
                     {stats?.sales?.lastMonth && (
                         <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
                             <h4 className="text-sm font-semibold text-gray-700 mb-3">Last Month Performance</h4>
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 <div>
                                     <div className="text-xs text-gray-600 mb-1">Revenue</div>
-                                    <div className="text-lg font-bold text-blue-700">
+                                    <div className="text-base sm:text-lg font-bold text-blue-700">
                                         AED {stats.sales.lastMonth.revenue?.toLocaleString() || 0}
                                     </div>
                                 </div>
                                 <div>
                                     <div className="text-xs text-gray-600 mb-1">Profit</div>
-                                    <div className="text-lg font-bold text-green-700">
+                                    <div className="text-base sm:text-lg font-bold text-green-700">
                                         AED {stats.sales.lastMonth.profit?.toLocaleString() || 0}
                                     </div>
                                 </div>
                                 <div>
                                     <div className="text-xs text-gray-600 mb-1">ZRS Profit</div>
-                                    <div className="text-lg font-bold text-purple-700">
+                                    <div className="text-base sm:text-lg font-bold text-purple-700">
                                         AED {stats.sales.lastMonth.zrsProfit?.toLocaleString() || 0}
                                     </div>
                                 </div>
@@ -560,9 +560,9 @@ const AdminDashboard = () => {
 
                         return (
                             <div className="mb-6">
-                                <div className="flex items-center justify-between mb-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                                     <h4 className="text-sm font-semibold text-gray-700">{chartTitle}</h4>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <select
                                             value={monthlyTrendView}
                                             onChange={(e) => {
@@ -570,7 +570,7 @@ const AdminDashboard = () => {
                                                 setSelectedMonthRange({ start: '', end: '' });
                                                 setSelectedYearRange({ start: '', end: '' });
                                             }}
-                                            className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                            className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[120px]"
                                         >
                                             <option value="months">Monthly View</option>
                                             <option value="year">Yearly View</option>
@@ -580,7 +580,7 @@ const AdminDashboard = () => {
                                                 <select
                                                     value={selectedMonthRange.start}
                                                     onChange={(e) => setSelectedMonthRange({ ...selectedMonthRange, start: e.target.value })}
-                                                    className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                    className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[110px]"
                                                 >
                                                     <option value="">From Month</option>
                                                     {availableMonths.map(month => (
@@ -590,7 +590,7 @@ const AdminDashboard = () => {
                                                 <select
                                                     value={selectedMonthRange.end}
                                                     onChange={(e) => setSelectedMonthRange({ ...selectedMonthRange, end: e.target.value })}
-                                                    className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                    className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[110px]"
                                                 >
                                                     <option value="">To Month</option>
                                                     {availableMonths.map(month => (
@@ -600,7 +600,7 @@ const AdminDashboard = () => {
                                                 {(selectedMonthRange.start || selectedMonthRange.end) && (
                                                     <button
                                                         onClick={() => setSelectedMonthRange({ start: '', end: '' })}
-                                                        className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                                                        className="text-xs text-red-600 hover:text-red-800 px-2 py-1.5 whitespace-nowrap"
                                                     >
                                                         Clear
                                                     </button>
@@ -611,7 +611,7 @@ const AdminDashboard = () => {
                                                 <select
                                                     value={selectedYearRange.start}
                                                     onChange={(e) => setSelectedYearRange({ ...selectedYearRange, start: e.target.value })}
-                                                    className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                    className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[100px]"
                                                 >
                                                     <option value="">From Year</option>
                                                     {availableYears.map(year => (
@@ -621,7 +621,7 @@ const AdminDashboard = () => {
                                                 <select
                                                     value={selectedYearRange.end}
                                                     onChange={(e) => setSelectedYearRange({ ...selectedYearRange, end: e.target.value })}
-                                                    className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                    className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[100px]"
                                                 >
                                                     <option value="">To Year</option>
                                                     {availableYears.map(year => (
@@ -631,7 +631,7 @@ const AdminDashboard = () => {
                                                 {(selectedYearRange.start || selectedYearRange.end) && (
                                                     <button
                                                         onClick={() => setSelectedYearRange({ start: '', end: '' })}
-                                                        className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                                                        className="text-xs text-red-600 hover:text-red-800 px-2 py-1.5 whitespace-nowrap"
                                                     >
                                                         Clear
                                                     </button>
@@ -641,7 +641,7 @@ const AdminDashboard = () => {
                                     </div>
                                 </div>
                                 <ResponsiveContainer width="100%" height={300}>
-                                    <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: monthlyTrendView === 'months' ? 60 : 30 }}>
                                         <defs>
                                             <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
@@ -660,11 +660,13 @@ const AdminDashboard = () => {
                                             angle={monthlyTrendView === 'months' ? -45 : 0}
                                             textAnchor={monthlyTrendView === 'months' ? 'end' : 'middle'}
                                             height={monthlyTrendView === 'months' ? 80 : 30}
+                                            interval="preserveStartEnd"
                                         />
                                         <YAxis 
                                             stroke="#6b7280"
                                             style={{ fontSize: '12px' }}
                                             tickFormatter={(value) => `AED ${(value / 1000).toFixed(0)}k`}
+                                            width={60}
                                         />
                                         <Tooltip 
                                             contentStyle={{ 
@@ -782,9 +784,9 @@ const AdminDashboard = () => {
 
                             return (
                                 <div>
-                                    <div className="flex items-center justify-between mb-4">
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                                         <h4 className="text-sm font-semibold text-gray-700">{chartTitle}</h4>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex flex-wrap items-center gap-2">
                                             <select
                                                 value={yearlyOverviewView}
                                                 onChange={(e) => {
@@ -792,7 +794,7 @@ const AdminDashboard = () => {
                                                     setSelectedMonthRange({ start: '', end: '' });
                                                     setSelectedYearRange({ start: '', end: '' });
                                                 }}
-                                                className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[120px]"
                                             >
                                                 <option value="year">Yearly View</option>
                                                 <option value="months">Monthly View</option>
@@ -802,7 +804,7 @@ const AdminDashboard = () => {
                                                     <select
                                                         value={selectedYearRange.start}
                                                         onChange={(e) => setSelectedYearRange({ ...selectedYearRange, start: e.target.value })}
-                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[100px]"
                                                     >
                                                         <option value="">From Year</option>
                                                         {availableYears.map(year => (
@@ -812,7 +814,7 @@ const AdminDashboard = () => {
                                                     <select
                                                         value={selectedYearRange.end}
                                                         onChange={(e) => setSelectedYearRange({ ...selectedYearRange, end: e.target.value })}
-                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[100px]"
                                                     >
                                                         <option value="">To Year</option>
                                                         {availableYears.map(year => (
@@ -822,7 +824,7 @@ const AdminDashboard = () => {
                                                     {(selectedYearRange.start || selectedYearRange.end) && (
                                                         <button
                                                             onClick={() => setSelectedYearRange({ start: '', end: '' })}
-                                                            className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                                                            className="text-xs text-red-600 hover:text-red-800 px-2 py-1.5 whitespace-nowrap"
                                                         >
                                                             Clear
                                                         </button>
@@ -833,7 +835,7 @@ const AdminDashboard = () => {
                                                     <select
                                                         value={selectedMonthRange.start}
                                                         onChange={(e) => setSelectedMonthRange({ ...selectedMonthRange, start: e.target.value })}
-                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[110px]"
                                                     >
                                                         <option value="">From Month</option>
                                                         {availableMonths.map(month => (
@@ -843,7 +845,7 @@ const AdminDashboard = () => {
                                                     <select
                                                         value={selectedMonthRange.end}
                                                         onChange={(e) => setSelectedMonthRange({ ...selectedMonthRange, end: e.target.value })}
-                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[110px]"
                                                     >
                                                         <option value="">To Month</option>
                                                         {availableMonths.map(month => (
@@ -853,7 +855,7 @@ const AdminDashboard = () => {
                                                     {(selectedMonthRange.start || selectedMonthRange.end) && (
                                                         <button
                                                             onClick={() => setSelectedMonthRange({ start: '', end: '' })}
-                                                            className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                                                            className="text-xs text-red-600 hover:text-red-800 px-2 py-1.5 whitespace-nowrap"
                                                         >
                                                             Clear
                                                         </button>
@@ -863,7 +865,7 @@ const AdminDashboard = () => {
                                         </div>
                                     </div>
                                     <ResponsiveContainer width="100%" height={250}>
-                                        <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                        <BarChart data={chartData} margin={{ top: 20, right: 10, left: -20, bottom: yearlyOverviewView === 'months' ? 50 : 30 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                                             <XAxis 
                                                 dataKey="period" 
@@ -872,11 +874,13 @@ const AdminDashboard = () => {
                                                 angle={yearlyOverviewView === 'months' ? -45 : 0}
                                                 textAnchor={yearlyOverviewView === 'months' ? 'end' : 'middle'}
                                                 height={yearlyOverviewView === 'months' ? 60 : 30}
+                                                interval="preserveStartEnd"
                                             />
                                             <YAxis 
                                                 stroke="#6b7280"
                                                 style={{ fontSize: '12px' }}
                                                 tickFormatter={(value) => `AED ${(value / 1000).toFixed(0)}k`}
+                                                width={60}
                                             />
                                             <Tooltip 
                                                 contentStyle={{ 
@@ -961,9 +965,9 @@ const AdminDashboard = () => {
 
                             return (
                                 <div>
-                                    <div className="flex items-center justify-between mb-4">
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                                         <h4 className="text-sm font-semibold text-gray-700">{chartTitle}</h4>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex flex-wrap items-center gap-2">
                                             <select
                                                 value={salesCountView}
                                                 onChange={(e) => {
@@ -971,7 +975,7 @@ const AdminDashboard = () => {
                                                     setSelectedMonthRange({ start: '', end: '' });
                                                     setSelectedYearRange({ start: '', end: '' });
                                                 }}
-                                                className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[120px]"
                                             >
                                                 <option value="months">Monthly View</option>
                                                 <option value="year">Yearly View</option>
@@ -981,7 +985,7 @@ const AdminDashboard = () => {
                                                     <select
                                                         value={selectedMonthRange.start}
                                                         onChange={(e) => setSelectedMonthRange({ ...selectedMonthRange, start: e.target.value })}
-                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[110px]"
                                                     >
                                                         <option value="">From Month</option>
                                                         {availableMonths.map(month => (
@@ -991,7 +995,7 @@ const AdminDashboard = () => {
                                                     <select
                                                         value={selectedMonthRange.end}
                                                         onChange={(e) => setSelectedMonthRange({ ...selectedMonthRange, end: e.target.value })}
-                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[110px]"
                                                     >
                                                         <option value="">To Month</option>
                                                         {availableMonths.map(month => (
@@ -1001,7 +1005,7 @@ const AdminDashboard = () => {
                                                     {(selectedMonthRange.start || selectedMonthRange.end) && (
                                                         <button
                                                             onClick={() => setSelectedMonthRange({ start: '', end: '' })}
-                                                            className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                                                            className="text-xs text-red-600 hover:text-red-800 px-2 py-1.5 whitespace-nowrap"
                                                         >
                                                             Clear
                                                         </button>
@@ -1012,7 +1016,7 @@ const AdminDashboard = () => {
                                                     <select
                                                         value={selectedYearRange.start}
                                                         onChange={(e) => setSelectedYearRange({ ...selectedYearRange, start: e.target.value })}
-                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[100px]"
                                                     >
                                                         <option value="">From Year</option>
                                                         {availableYears.map(year => (
@@ -1022,7 +1026,7 @@ const AdminDashboard = () => {
                                                     <select
                                                         value={selectedYearRange.end}
                                                         onChange={(e) => setSelectedYearRange({ ...selectedYearRange, end: e.target.value })}
-                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                                        className="text-xs border border-gray-300 rounded-md px-2 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 min-w-[100px]"
                                                     >
                                                         <option value="">To Year</option>
                                                         {availableYears.map(year => (
@@ -1032,7 +1036,7 @@ const AdminDashboard = () => {
                                                     {(selectedYearRange.start || selectedYearRange.end) && (
                                                         <button
                                                             onClick={() => setSelectedYearRange({ start: '', end: '' })}
-                                                            className="text-xs text-red-600 hover:text-red-800 px-2 py-1"
+                                                            className="text-xs text-red-600 hover:text-red-800 px-2 py-1.5 whitespace-nowrap"
                                                         >
                                                             Clear
                                                         </button>
@@ -1042,7 +1046,7 @@ const AdminDashboard = () => {
                                         </div>
                                     </div>
                                     <ResponsiveContainer width="100%" height={250}>
-                                        <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                        <LineChart data={chartData} margin={{ top: 20, right: 10, left: -20, bottom: salesCountView === 'months' ? 50 : 30 }}>
                                             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                                             <XAxis 
                                                 dataKey="period" 
@@ -1051,6 +1055,12 @@ const AdminDashboard = () => {
                                                 angle={salesCountView === 'months' ? -45 : 0}
                                                 textAnchor={salesCountView === 'months' ? 'end' : 'middle'}
                                                 height={salesCountView === 'months' ? 60 : 30}
+                                                interval="preserveStartEnd"
+                                            />
+                                            <YAxis 
+                                                stroke="#6b7280"
+                                                style={{ fontSize: '12px' }}
+                                                width={60}
                                             />
                                             <YAxis 
                                                 stroke="#6b7280"
